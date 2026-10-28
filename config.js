@@ -1,18 +1,13 @@
 /**
  * U.H.S. Kaparpura — Student Portal & Live Exam Host Configuration
- * ============================================================================
- * HOW TO CONNECT YOUR SUPABASE POSTGRESQL PROJECT:
- * 1. Go to https://supabase.com -> New Project ("uhskaparpura-portal")
- * 2. Go to Project Settings -> Data API (or API)
- * 3. Copy your "Project URL" and "anon public" key and paste them below
- *    (OR click the "⚙️ Connect Supabase" button directly in the Portal UI!)
+ * Connected to Supabase PostgreSQL Project: lvrsanukztinwqrgivth
  */
 window.PORTAL_CONFIG = {
-  // Paste your Supabase Project URL here (e.g., "https://xyzcompany.supabase.co")
-  SUPABASE_URL: localStorage.getItem("UHS_SUPABASE_URL") || "",
+  // Supabase Project URL
+  SUPABASE_URL: localStorage.getItem("UHS_SUPABASE_URL") || "https://lvrsanukztinwqrgivth.supabase.co",
 
-  // Paste your Supabase anon public key here (e.g., "eyJhbGciOiJIUzI1NiIsInR5cCI6...")
-  SUPABASE_ANON_KEY: localStorage.getItem("UHS_SUPABASE_ANON_KEY") || "",
+  // Supabase anon public key
+  SUPABASE_ANON_KEY: localStorage.getItem("UHS_SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx2cnNhbnVrenRpbndxcmdpdnRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxODAzODUsImV4cCI6MjEwODc1NjM4NX0.PwB8t5kqdla0oHsAcR2ptZO3g4Ajw78QJOBNUnNQzzw",
 
   // Read-only SchoolDB verification endpoint (Hybrid Zero-Maintenance auto-upsert)
   SCHOOL_DB_API_URL: "https://script.google.com/macros/s/AKfycbwQtEdZ-Y-NIgFFoWCmqQap-hCdfHk6lTFjSqswH-bOS75MkPr4PFz31S-TuFea9KE/exec",
