@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>U.H.S. Kaparpura — Gamified Student Portal & ICT Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="portal.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <header class="portal-topbar">
+    <div class="brand-wrap">
+      <div class="brand-badge">🎓</div>
+      <div class="brand-title">
+        <h1>U.H.S. Kaparpura — Student Learning Portal</h1>
+        <p>ICT Lab, MS Office, AI &amp; Bihar Board (BSEB) Exam Score Booster</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <button id="dbStatusBtn" class="db-pill disconnected" onclick="PortalApp.openSupabaseModal()">
+        ⚙️ Connect Supabase
+      </button>
+
+      <div class="lang-toggle" title="Switch Medium / भाषा बदलें">
+        <button class="lang-btn" data-lang="HI" onclick="PortalApp.setLang('HI')">हिन्दी</button>
+        <button class="lang-btn" data-lang="EN" onclick="PortalApp.setLang('EN')">English</button>
+        <button class="lang-btn active" data-lang="BOTH" onclick="PortalApp.setLang('BOTH')">Both द्विभाषी</button>
+      </div>
+
+      <a href="teacher-host.html" class="btn btn-outline" style="font-size:0.78rem;padding:0.4rem 0.75rem;">
+        👨‍🏫 Teacher Host
+      </a>
+
+      <button id="switchStudentBtn" class="btn btn-danger hidden" onclick="PortalApp.logout()" style="font-size:0.78rem;padding:0.4rem 0.75rem;">
+        🔄 Switch Student
+      </button>
+    </div>
+  </header>
+
+  <main class="portal-container">
+
+    <!-- ======================== LOGIN VIEW ======================== -->
+    <section id="loginView" class="login-wrapper">
+      <div class="glass-card">
+        <h2 style="font-size:1.25rem;margin-bottom:0.25rem;">विद्यार्थी लॉगिन / Student Login</h2>
+        <p style="font-size:0.84rem;color:var(--text-muted);">
+          उत्क्रमित उच्च माध्यमिक विद्यालय कपरपुरा के वर्तमान छात्र अपने <b>Student Code</b> या <b>Class + Roll + DOB</b> से लॉगिन करें।
+        </p>
+
+        <div class="mode-tabs">
+          <button id="tabCode" class="mode-tab active" onclick="PortalApp.setLoginMode('CODE')">
+            🔢 Student Code से
+          </button>
+          <button id="tabDetails" class="mode-tab" onclick="PortalApp.setLoginMode('DETAILS')">
+            📋 Class + Roll + DOB से
+          </button>
+        </div>
+
+        <div id="codeModeFields">
+          <div class="form-group">
+            <label>छात्र कोड (15-Digit Student Code)</label>
+            <input type="text" id="loginStudentCode" class="form-control" placeholder="उदा. 202410141306317" value="202410141306317" />
+          </div>
+        </div>
+
+        <div id="detailsModeFields" class="hidden">
+          <div class="form-row">
+            <div class="form-group">
+              <label>कक्षा (Class)</label>
+              <select id="loginClass" class="form-control" onchange="PortalApp.toggleStreamField()">
+                <option value="9">Class 9</option>
+                <option value="10">Class 10</option>
+                <option value="11" selected>Class 11</option>
+                <option value="12">Class 12</option>
+              </select>
+            </div>
+            <div class="form-group" id="streamGroup">
+              <label>संकाय (Stream)</label>
+              <select id="loginStream" class="form-control">
+                <option value="Arts">Arts (कला)</option>
+                <option value="Science">Science (विज्ञान)</option>
+                <option value="Commerce">Commerce (वाणिज्य)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>रोल नंबर (Roll No)</label>
+              <input type="number" id="loginRoll" class="form-control" placeholder="उदा. 2" />
+            </div>
+            <div class="form-group">
+              <label>जन्म तिथि (Date of Birth)</label>
+              <input type="date" id="loginDob" class="form-control" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Optional PIN input if required -->
+        <div id="pinPromptBox" class="form-group hidden" style="background:rgba(59,130,246,0.12);padding:0.75rem;border-radius:10px;border:1px solid rgba(59,130,246,0.35);">
+          <label>🔐 अपना 4-अंकीय सुरक्षा पिन दर्ज करें (Enter 4-Digit Security PIN)</label>
+          <input type="password" id="loginPin" maxlength="4" class="form-control" placeholder="****" />
+        </div>
+
+        <!-- Optional Co-Learner / Buddy Mode for Shared ICT Lab PC -->
+        <details style="margin-bottom:0.9rem;font-size:0.82rem;color:var(--text-muted);">
+          <summary style="cursor:pointer;font-weight:600;color:#93c5fd;">
+            👥 ICT Lab Shared PC? सहपाठी (Co-Learner Buddy) जोड़ें (+50% XP)
+          </summary>
+          <div style="margin-top:0.5rem;">
+            <input type="text" id="buddyStudentId" class="form-control" placeholder="सहपाठी का Student Code (वैकल्पिक)" />
+          </div>
+        </details>
+
+        <div id="loginError" class="hidden" style="background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.45);color:#fecaca;padding:0.65rem 0.85rem;border-radius:10px;font-size:0.84rem;margin-bottom:0.85rem;"></div>
+
+        <button id="loginSubmitBtn" class="btn btn-primary" style="width:100%;padding:0.75rem;font-size:0.95rem;" onclick="PortalApp.handleLogin()">
+          🚀 पोर्टल में प्रवेश करें (Login to Student Portal)
+        </button>
+
+        <div style="margin-top:0.9rem;padding-top:0.75rem;border-top:1px solid var(--border-glass);font-size:0.78rem;color:var(--text-muted);display:flex;justify-content:space-between;align-items:center;">
+          <span>डेमो छात्र कोड: <code style="color:#93c5fd;">202410141306317</code> (Ankit Kumar, Class 11 Arts)</span>
+          <button class="btn btn-outline" style="padding:0.25rem 0.6rem;font-size:0.74rem;" onclick="PortalApp.fillDemo()">Auto-Fill</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================== DASHBOARD VIEW ======================== -->
+    <section id="dashboardView" class="hidden">
+
+      <!-- Active Teacher Live Exam Alert Banner -->
+      <div id="liveExamAlertBanner" class="live-banner hidden">
+        <div>
+          <span style="background:#ef4444;color:#fff;font-size:0.72rem;font-weight:800;padding:0.2rem 0.55rem;border-radius:99px;margin-right:0.5rem;">🔴 LIVE TEST ACTIVE</span>
+          <strong id="liveBannerTitle">ICT Lab Live Test</strong>
+          <span id="liveBannerMeta" style="font-size:0.84rem;color:#fde68a;margin-left:0.5rem;"></span>
+        </div>
+        <button class="btn btn-accent" onclick="PortalApp.joinBannerExam()">
+          ⚡ अभी लाइव टेस्ट में जुड़ें (Join Live Exam)
+        </button>
+      </div>
+
+      <!-- Student Hero Stats -->
+      <div class="hero-stats">
+        <div class="stat-tile">
+          <div class="stat-icon">👨‍🎓</div>
+          <div>
+            <div class="stat-val" id="stName" style="font-size:1.02rem;">STUDENT</div>
+            <div class="stat-lbl" id="stMeta">Class 11 • Roll 2</div>
+          </div>
+        </div>
+
+        <div class="stat-tile">
+          <div class="stat-icon">⚡</div>
+          <div>
+            <div class="stat-val" id="stTotalXp">0 XP</div>
+            <div class="stat-lbl">कुल स्कोर (Total XP)</div>
+          </div>
+        </div>
+
+        <div class="stat-tile">
+          <div class="stat-icon">💻</div>
+          <div>
+            <div class="stat-val" id="stIctXp">0 XP</div>
+            <div class="stat-lbl">ICT Lab XP</div>
+          </div>
+        </div>
+
+        <div class="stat-tile">
+          <div class="stat-icon">🔥</div>
+          <div>
+            <div class="stat-val" id="stStreak">1 Day</div>
+            <div class="stat-lbl">दैनिक स्ट्रीक (Streak)</div>
+          </div>
+        </div>
+
+        <div class="stat-tile" style="cursor:pointer;" onclick="PortalApp.showTab('mistakes')">
+          <div class="stat-icon" style="background:rgba(239,68,68,0.18);">🛠️</div>
+          <div>
+            <div class="stat-val" id="stMistakesCount">0</div>
+            <div class="stat-lbl">गलती सुधार बैंक (Mistakes)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Pills -->
+      <nav class="portal-nav">
+        <button class="nav-pill active" data-tab="chapters" onclick="PortalApp.showTab('chapters')">
+          📚 अध्याय एवं प्रैक्टिस (Chapters &amp; ICT Lab)
+        </button>
+        <button class="nav-pill" data-tab="live" onclick="PortalApp.showTab('live')">
+          📡 लाइव टेस्ट रूम (Live Exam Room PIN)
+        </button>
+        <button class="nav-pill" data-tab="mistakes" onclick="PortalApp.showTab('mistakes')">
+          🛠️ गलती सुधार बैंक (Mistake Notebook)
+        </button>
+        <button class="nav-pill" data-tab="leaderboard" onclick="PortalApp.showTab('leaderboard')">
+          🏆 लीडरबोर्ड (Supabase Leaderboard)
+        </button>
+        <button class="nav-pill" data-tab="certificate" onclick="PortalApp.showTab('certificate')">
+          🎖️ बैज एवं प्रमाण-पत्र (Badges &amp; Certificate)
+        </button>
+      </nav>
+
+      <!-- TAB 1: CHAPTERS & SIMULATORS -->
+      <div id="tab_chapters">
+        <div id="enrolledSubjectsBar" style="margin-bottom:1rem;display:flex;gap:0.45rem;flex-wrap:wrap;align-items:center;"></div>
+        <div id="chaptersGrid" class="chapters-grid"></div>
+      </div>
+
+      <!-- TAB 2: JOIN TEACHER LIVE EXAM BY 4-DIGIT PIN -->
+      <div id="tab_live" class="hidden">
+        <div class="glass-card" style="max-width:560px;margin:0 auto;text-align:center;">
+          <h3 style="font-size:1.25rem;margin-bottom:0.4rem;">📡 शिक्षक लाइव परीक्षा (On-Demand Live Exam)</h3>
+          <p style="font-size:0.86rem;color:var(--text-muted);margin-bottom:1.1rem;">
+            ICT लैब या कक्षा में शिक्षक द्वारा बोर्ड पर दिखाए गए <b>4-अंकीय Room PIN</b> को दर्ज करें।
+          </p>
+          <div style="display:flex;gap:0.65rem;justify-content:center;max-width:340px;margin:0 auto 1rem;">
+            <input type="text" id="liveRoomPinInput" maxlength="4" class="form-control" placeholder="4-Digit PIN (e.g. 4829)" style="text-align:center;font-size:1.3rem;font-weight:800;letter-spacing:4px;" />
+            <button class="btn btn-primary" onclick="PortalApp.joinLiveExamByPin()">Join</button>
+          </div>
+          <p style="font-size:0.78rem;color:#fcd34d;">
+            ⚠️ एंटी-चीट सक्रिय: लाइव परीक्षा के दौरान टैब बदलने पर शिक्षक के स्क्रीन पर अलर्ट जाएगा।
+          </p>
+        </div>
+      </div>
+
+      <!-- TAB 3: MISTAKE NOTEBOOK -->
+      <div id="tab_mistakes" class="hidden">
+        <div class="glass-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+            <div>
+              <h3>🛠️ गलती सुधार बैंक (Personal Mistake Notebook)</h3>
+              <p style="font-size:0.84rem;color:var(--text-muted);">
+                जिन प्रश्नों के उत्तर गलत हुए हैं, उनका यहाँ पुनः अभ्यास करें और <b>+5 Bonus XP</b> पाएं!
+              </p>
+            </div>
+            <button class="btn btn-success" onclick="PortalApp.startMistakeRevisionQuiz()">
+              🎯 गलतियों का टेस्ट शुरू करें (Practice Mistakes)
+            </button>
+          </div>
+          <div id="mistakesListContainer"></div>
+        </div>
+      </div>
+
+      <!-- TAB 4: 3-TIER LEADERBOARD -->
+      <div id="tab_leaderboard" class="hidden">
+        <div class="glass-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
+            <div>
+              <h3>🏆 विद्यालय लीडरबोर्ड (Real-Time PostgreSQL Leaderboard)</h3>
+              <p style="font-size:0.82rem;color:var(--text-muted);">Supabase PostgreSQL द्वारा संचालित रैंकिंग</p>
+            </div>
+            <div style="display:flex;gap:0.45rem;flex-wrap:wrap;">
+              <button class="btn btn-primary" id="lbBtn_class" onclick="PortalApp.switchLeaderboard('class')">🏫 मेरी कक्षा (My Class)</button>
+              <button class="btn btn-outline" id="lbBtn_ict" onclick="PortalApp.switchLeaderboard('ict')">💻 ICT Lab Champions</button>
+              <button class="btn btn-outline" id="lbBtn_weekly" onclick="PortalApp.switchLeaderboard('weekly')">🔥 साप्ताहिक (Weekly Stars)</button>
+            </div>
+          </div>
+          <div id="leaderboardTableWrap"></div>
+        </div>
+      </div>
+
+      <!-- TAB 5: BADGES, PIN SECURITY & PRINTABLE CERTIFICATE -->
+      <div id="tab_certificate" class="hidden">
+        <div class="glass-card" style="margin-bottom:1.2rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+            <div>
+              <h3>🔐 4-अंकीय सुरक्षा पिन सेट करें (Optional Security PIN)</h3>
+              <p style="font-size:0.82rem;color:var(--text-muted);">
+                ताकि कोई अन्य छात्र आपके रोल नंबर से लॉगिन न कर सके।
+              </p>
+            </div>
+            <div style="display:flex;gap:0.5rem;">
+              <input type="password" id="newStudentPin" maxlength="4" class="form-control" placeholder="4-Digit PIN" style="width:140px;" />
+              <button class="btn btn-primary" onclick="PortalApp.saveNewPin()">Save PIN</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card" style="margin-bottom:1.2rem;">
+          <h3 style="margin-bottom:0.85rem;">🎖️ अर्जित बैज (Earned Badges)</h3>
+          <div id="badgesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0.75rem;"></div>
+        </div>
+
+        <div class="glass-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+            <h3>📜 उपलब्धि प्रमाण-पत्र (Printable Achievement Certificate)</h3>
+            <button class="btn btn-accent" onclick="window.print()">🖨️ Print / Save PDF</button>
+          </div>
+
+          <div id="certificatePrintCard" class="certificate-print-area">
+            <h2 style="color:#1e3a8a;font-size:1.45rem;">उत्क्रमित उच्च माध्यमिक विद्यालय कपरपुरा, काँटी (मुजफ्फरपुर)</h2>
+            <p style="color:#475569;font-size:0.9rem;margin-bottom:1rem;">UPGRADED SENIOR SECONDARY SCHOOL KAPARPURA, KANTI • ICT &amp; DIGITAL LEARNING LAB</p>
+            <div style="display:inline-block;background:#dbeafe;color:#1e40af;padding:0.35rem 1.2rem;border-radius:99px;font-weight:800;margin-bottom:1rem;">
+              CERTIFICATE OF ACADEMIC &amp; ICT EXCELLENCE
+            </div>
+            <p style="font-size:1rem;">प्रमाणित किया जाता है कि छात्र/छात्रा / This is to certify that</p>
+            <h1 id="certStudentName" style="font-size:1.8rem;color:#0f172a;margin:0.4rem 0;text-decoration:underline;">ANKIT KUMAR</h1>
+            <p id="certStudentMeta" style="font-size:0.95rem;color:#334155;margin-bottom:0.9rem;">Class 11 (Arts) • Roll No: 2</p>
+            <p style="font-size:0.95rem;max-width:640px;margin:0 auto 1.2rem;">
+              ने विद्यालय के <b>ICT Lab, MS Office, Artificial Intelligence एवं BSEB Score Booster Portal</b> पर उत्कृष्ट प्रदर्शन करते हुए
+              <strong id="certXpText">25 XP</strong> एवं <strong id="certBadgesText">1 Badge</strong> अर्जित किया है।
+            </p>
+            <div style="display:flex;justify-content:space-around;margin-top:2rem;font-size:0.88rem;color:#334155;">
+              <div>_______________________<br/><b>ICT Lab In-Charge</b></div>
+              <div>Date: <span id="certDateText"></span></div>
+              <div>_______________________<br/><b>Principal / प्रधानाध्यापक</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVE ACTIVITY / SIMULATOR MODAL -->
+      <div id="activityWorkspace" class="glass-card hidden" style="margin-top:1rem;"></div>
+
+    </section>
+
+  </main>
+
+  <!-- ======================== SUPABASE SETUP MODAL ======================== -->
+  <div id="supabaseModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;">
+        <h3>⚙️ Connect Supabase PostgreSQL Database</h3>
+        <button class="btn btn-outline" onclick="PortalApp.closeSupabaseModal()" style="padding:0.25rem 0.6rem;">✕</button>
+      </div>
+      <p style="font-size:0.84rem;color:var(--text-muted);margin-bottom:0.9rem;">
+        Paste your free <b>Supabase Project URL</b> and <b>anon public key</b> below (from <i>Supabase Dashboard → Project Settings → API</i>). Make sure you have run <code>supabase/schema.sql</code> in the Supabase SQL Editor first!
+      </p>
+
+      <div class="form-group">
+        <label>Supabase Project URL</label>
+        <input type="text" id="sbUrlInput" class="form-control" placeholder="https://your-project-id.supabase.co" />
+      </div>
+
+      <div class="form-group">
+        <label>Supabase Anon Public Key</label>
+        <input type="text" id="sbKeyInput" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+      </div>
+
+      <div id="sbTestMsg" style="font-size:0.82rem;margin-bottom:0.85rem;"></div>
+
+      <div style="display:flex;gap:0.65rem;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="PortalApp.closeSupabaseModal()">Cancel</button>
+        <button class="btn btn-success" onclick="PortalApp.saveAndTestSupabase()">💾 Save &amp; Test Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="data/curriculum.js"></script>
+  <script src="portal.js"></script>
+</body>
+</html>

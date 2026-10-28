@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>U.H.S. Kaparpura — Teacher Live Exam Host &amp; Supabase Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="portal.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header class="portal-topbar">
+    <div class="brand-wrap">
+      <div class="brand-badge">👨‍🏫</div>
+      <div class="brand-title">
+        <h1>U.H.S. Kaparpura — Teacher Live Exam Host &amp; Projector Monitor</h1>
+        <p>Powered by Supabase PostgreSQL &amp; Realtime WebSockets</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <button id="hostDbBtn" class="db-pill disconnected" onclick="TeacherHost.openSupabaseModal()">
+        ⚙️ Connect Supabase
+      </button>
+      <a href="index.html" class="btn btn-outline">🎓 Student Portal पर जाएं</a>
+    </div>
+  </header>
+
+  <main class="portal-container">
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.2rem;margin-bottom:1.25rem;">
+
+      <!-- 1. Launch On-Demand Live Exam -->
+      <div class="glass-card">
+        <h3 style="margin-bottom:0.35rem;">🚀 नया लाइव टेस्ट शुरू करें (Launch Live Exam)</h3>
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem;">
+          अध्याय पढ़ाने के तुरंत बाद 4-अंकीय Room PIN बनाएं। छात्रों के डैशबोर्ड पर स्वतः बैनर दिखेगा।
+        </p>
+
+        <div class="form-group">
+          <label>परीक्षा का शीर्षक (Exam Title)</label>
+          <input type="text" id="examTitle" class="form-control" value="ICT Lab Live Test — MS Word &amp; Excel" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>शिक्षक का नाम (Teacher Name)</label>
+            <input type="text" id="teacherName" class="form-control" value="ICT Instructor" />
+          </div>
+          <div class="form-group">
+            <label>अध्याय चुनें (Chapter)</label>
+            <select id="examChapter" class="form-control"></select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>लक्षित कक्षा (Target Class)</label>
+            <select id="examClass" class="form-control">
+              <option value="ALL">All Classes (9–12)</option>
+              <option value="9">Class 9</option>
+              <option value="10">Class 10</option>
+              <option value="11">Class 11</option>
+              <option value="12">Class 12</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>समय (Duration Mins)</label>
+            <input type="number" id="examDuration" class="form-control" value="10" min="2" max="60" />
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;padding:0.7rem;" onclick="TeacherHost.launchExam()">
+          📡 Generate 4-Digit Room PIN (Start Live Exam)
+        </button>
+      </div>
+
+      <!-- 2. Student PIN Reset & Bulk SchoolDB CSV Sync to Supabase -->
+      <div class="glass-card" style="display:flex;flex-direction:column;justify-content:space-between;gap:1rem;">
+        <div>
+          <h3 style="margin-bottom:0.35rem;">🔐 छात्र पिन रीसेट (1-Click Student PIN Reset)</h3>
+          <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.75rem;">
+            यदि कोई छात्र अपना 4-अंकीय पिन भूल गया है, तो उसका Student Code डालकर रीसेट करें:
+          </p>
+          <div style="display:flex;gap:0.5rem;">
+            <input type="text" id="resetStudentCode" class="form-control" placeholder="Student Code (e.g. 202410141306317)" />
+            <button class="btn btn-accent" onclick="TeacherHost.resetPin()">Reset PIN</button>
+          </div>
+          <div id="resetPinMsg" style="font-size:0.8rem;margin-top:0.4rem;"></div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border-glass);" />
+
+        <div>
+          <h3 style="margin-bottom:0.35rem;">📥 Bulk Sync SchoolDB CSV to Supabase PostgreSQL</h3>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.65rem;">
+            वैसे तो छात्र लॉगिन करते समय स्वतः <code>SchoolDB</code> से सत्यापित होकर Supabase में जुड़ जाते हैं, लेकिन आप चाहें तो पूरे स्कूल की <code>SchoolDB.csv</code> फाइल एक साथ अपलोड कर सकते हैं:
+          </p>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <input type="file" id="csvFileInput" accept=".csv" class="form-control" style="font-size:0.8rem;" />
+            <button class="btn btn-success" onclick="TeacherHost.importCsvToSupabase()">⬆️ Sync CSV</button>
+          </div>
+          <div id="csvImportMsg" style="font-size:0.8rem;margin-top:0.4rem;"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3. Live Projector Monitor -->
+    <div id="liveMonitorCard" class="glass-card hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;padding-bottom:0.85rem;border-bottom:1px solid var(--border-glass);">
+        <div>
+          <span style="background:#10b981;color:#fff;font-size:0.75rem;font-weight:800;padding:0.25rem 0.65rem;border-radius:99px;">🟢 REALTIME WEBSOCKET ACTIVE</span>
+          <h2 id="monTitle" style="margin-top:0.35rem;">Live Evaluation</h2>
+        </div>
+
+        <div style="text-align:center;background:#090d16;border:2px solid #3b82f6;padding:0.55rem 1.4rem;border-radius:14px;">
+          <div style="font-size:0.75rem;color:var(--text-muted);">ROOM PIN (बोर्ड पर लिखें)</div>
+          <div id="monPin" style="font-size:2.1rem;font-weight:900;color:#60a5fa;letter-spacing:6px;">----</div>
+        </div>
+
+        <div style="display:flex;gap:0.55rem;flex-wrap:wrap;">
+          <button class="btn btn-outline" onclick="TeacherHost.refreshMonitor()">🔄 Refresh</button>
+          <button class="btn btn-success" onclick="TeacherHost.exportCsv()">📊 Export Excel/CSV</button>
+          <button class="btn btn-danger" onclick="TeacherHost.endExam()">🛑 End Exam</button>
+        </div>
+      </div>
+
+      <div id="participantsTableWrap">
+        <p style="color:var(--text-muted);padding:1rem;">छात्रों के जुड़ने की प्रतीक्षा की जा रही है (Waiting for students to join via Room PIN)...</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Supabase Modal -->
+  <div id="supabaseModal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem;">
+        <h3>⚙️ Connect Supabase PostgreSQL Database</h3>
+        <button class="btn btn-outline" onclick="TeacherHost.closeSupabaseModal()">✕</button>
+      </div>
+      <div class="form-group">
+        <label>Supabase Project URL</label>
+        <input type="text" id="sbUrlInput" class="form-control" placeholder="https://your-project-id.supabase.co" />
+      </div>
+      <div class="form-group">
+        <label>Supabase Anon Public Key</label>
+        <input type="text" id="sbKeyInput" class="form-control" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..." />
+      </div>
+      <div id="sbTestMsg" style="font-size:0.82rem;margin-bottom:0.85rem;"></div>
+      <div style="display:flex;gap:0.65rem;justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="TeacherHost.closeSupabaseModal()">Cancel</button>
+        <button class="btn btn-success" onclick="TeacherHost.saveAndTestSupabase()">💾 Save &amp; Test</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="supabase-client.js"></script>
+  <script src="data/curriculum.js"></script>
+  <script>
+    const TeacherHost = (function () {
+      let currentExam = null;
+
+      function init() {
+        updatePill();
+        const sel = document.getElementById("examChapter");
+        (window.PORTAL_CURRICULUM.chapters || []).forEach((ch) => {
+          const opt = document.createElement("option");
+          opt.value = ch.id;
+          opt.textContent = `${ch.icon} ${ch.titleEn} (${ch.questions.length} Qs)`;
+          sel.appendChild(opt);
+        });
+      }
+
+      function updatePill() {
+        const btn = document.getElementById("hostDbBtn");
+        if (window.PortalDB && window.PortalDB.isConfigured()) {
+          btn.className = "db-pill connected";
+          btn.textContent = "🟢 Supabase PostgreSQL Connected";
+        } else {
+          btn.className = "db-pill disconnected";
+          btn.textContent = "🟠 Connect Supabase DB";
+        }
+      }
+
+      function openSupabaseModal() {
+        const c = window.PortalDB.getCredentials();
+        document.getElementById("sbUrlInput").value = c.url || "";
+        document.getElementById("sbKeyInput").value = c.key || "";
+        document.getElementById("supabaseModal").classList.remove("hidden");
+      }
+
+      function closeSupabaseModal() {
+        document.getElementById("supabaseModal").classList.add("hidden");
+      }
+
+      async function saveAndTestSupabase() {
+        const url = document.getElementById("sbUrlInput").value.trim();
+        const key = document.getElementById("sbKeyInput").value.trim();
+        const msg = document.getElementById("sbTestMsg");
+        window.PortalDB.saveCredentials(url, key);
+        updatePill();
+        msg.innerHTML = `<span style="color:#fde68a;">⏳ Testing connection...</span>`;
+        try {
+          await window.PortalDB.getLeaderboards("11", "Arts");
+          msg.innerHTML = `<span style="color:#6ee7b7;">✅ Supabase PostgreSQL connected!</span>`;
+          setTimeout(closeSupabaseModal, 800);
+        } catch (err) {
+          msg.innerHTML = `<span style="color:#fca5a5;">❌ ${err.message}</span>`;
+        }
+      }
+
+      async function launchExam() {
+        if (!window.PortalDB.isConfigured()) {
+          openSupabaseModal();
+          return;
+        }
+        const chapterId = document.getElementById("examChapter").value;
+        const ch = window.PORTAL_CURRICULUM.chapters.find((c) => c.id === chapterId) || window.PORTAL_CURRICULUM.chapters[0];
+
+        try {
+          const res = await window.PortalDB.createLiveExam({
+            title: document.getElementById("examTitle").value.trim(),
+            teacherName: document.getElementById("teacherName").value.trim(),
+            chapterId,
+            className: document.getElementById("examClass").value,
+            durationMins: parseInt(document.getElementById("examDuration").value, 10) || 10,
+            questionCount: (ch.questions || []).length,
+            questions: ch.questions || []
+          });
+
+          currentExam = res.exam;
+          document.getElementById("liveMonitorCard").classList.remove("hidden");
+          document.getElementById("monTitle").textContent = currentExam.title;
+          document.getElementById("monPin").textContent = currentExam.pin;
+          renderParticipants({});
+
+          // Subscribe to Supabase Realtime WebSocket changes for this Room PIN
+          window.PortalDB.subscribeToLiveExam(currentExam.pin, () => {
+            refreshMonitor();
+          });
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+
+      async function refreshMonitor() {
+        if (!currentExam) return;
+        try {
+          const res = await window.PortalDB.getLiveExamStatus(currentExam.pin);
+          currentExam = res.exam;
+          renderParticipants(currentExam.participants || {});
+        } catch (e) {}
+      }
+
+      function renderParticipants(partsMap) {
+        const wrap = document.getElementById("participantsTableWrap");
+        const list = Object.values(partsMap || {}).sort((a, b) => b.score - a.score || b.answeredCount - a.answeredCount);
+
+        if (list.length === 0) {
+          wrap.innerHTML = `<p style="color:var(--text-muted);padding:1rem;">छात्रों के जुड़ने की प्रतीक्षा की जा रही है (Waiting for students to enter Room PIN <b>${currentExam.pin}</b>)...</p>`;
+          return;
+        }
+
+        wrap.innerHTML = `
+          <table class="lb-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Student Name</th>
+                <th>Class &amp; Roll</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Score</th>
+                <th>Tab Switches (Anti-Cheat)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map((p, i) => `
+                <tr>
+                  <td>#${i + 1}</td>
+                  <td><b>${p.studentName}</b></td>
+                  <td>Class ${p.className} (${p.stream}) • Roll ${p.rollNo}</td>
+                  <td>
+                    <span style="padding:0.2rem 0.55rem;border-radius:99px;font-size:0.75rem;background:${p.status === "SUBMITTED" ? "rgba(16,185,129,0.2)" : "rgba(59,130,246,0.2)"};color:${p.status === "SUBMITTED" ? "#6ee7b7" : "#93c5fd"};">
+                      ${p.status}
+                    </span>
+                  </td>
+                  <td>${p.answeredCount} / ${p.totalQuestions}</td>
+                  <td style="color:#6ee7b7;font-weight:800;">${p.score} (${p.accuracy}%)</td>
+                  <td style="color:${p.tabSwitches > 0 ? "#fca5a5" : "#94a3b8"};font-weight:700;">
+                    ${p.tabSwitches > 0 ? `⚠️ ${p.tabSwitches} Switches` : "✔ 0 (Clean)"}
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      async function endExam() {
+        if (!currentExam) return;
+        const res = await window.PortalDB.endLiveExam(currentExam.pin);
+        currentExam = res.exam;
+        renderParticipants(currentExam.participants || {});
+        alert("लाइव परीक्षा समाप्त कर दी गई है। आप परिणाम CSV में डाउनलोड कर सकते हैं।");
+      }
+
+      function exportCsv() {
+        if (!currentExam || !currentExam.participants) return;
+        const rows = [["Rank", "Student ID", "Student Name", "Class", "Stream", "Roll No", "Status", "Score", "Total Questions", "Accuracy %", "Tab Switches"]];
+        const list = Object.values(currentExam.participants).sort((a, b) => b.score - a.score);
+        list.forEach((p, idx) => {
+          rows.push([idx + 1, p.studentId, `"${p.studentName}"`, p.className, p.stream, p.rollNo, p.status, p.score, p.totalQuestions, p.accuracy, p.tabSwitches]);
+        });
+        const csv = rows.map((r) => r.join(",")).join("\n");
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `UHS_LiveExam_${currentExam.pin}.csv`;
+        a.click();
+      }
+
+      async function resetPin() {
+        const code = document.getElementById("resetStudentCode").value.trim();
+        const msg = document.getElementById("resetPinMsg");
+        try {
+          const res = await window.PortalDB.resetStudentPin(code);
+          msg.innerHTML = `<span style="color:#6ee7b7;">✅ ${res.message}</span>`;
+        } catch (err) {
+          msg.innerHTML = `<span style="color:#fca5a5;">❌ ${err.message}</span>`;
+        }
+      }
+
+      async function importCsvToSupabase() {
+        const fileEl = document.getElementById("csvFileInput");
+        const msg = document.getElementById("csvImportMsg");
+        if (!fileEl.files || !fileEl.files[0]) {
+          msg.innerHTML = `<span style="color:#fca5a5;">⚠️ Please choose a SchoolDB CSV file first.</span>`;
+          return;
+        }
+        msg.innerHTML = `<span style="color:#fde68a;">⏳ Parsing CSV and syncing to Supabase PostgreSQL...</span>`;
+
+        const text = await fileEl.files[0].text();
+        const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+        if (lines.length < 2) {
+          msg.innerHTML = `<span style="color:#fca5a5;">❌ CSV file is empty.</span>`;
+          return;
+        }
+
+        const headers = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim().toLowerCase());
+        const idxOf = (aliases) => {
+          for (const a of aliases) {
+            const i = headers.indexOf(a.toLowerCase());
+            if (i !== -1) return i;
+          }
+          return -1;
+        };
+
+        const cCode = idxOf(["studentcode", "student code", "छात्र कोड"]);
+        const cName = idxOf(["studentname", "student name", "name", "विद्यार्थी का नाम"]);
+        const cFather = idxOf(["fathername", "father name", "पिता का नाम"]);
+        const cDob = idxOf(["dob", "date of birth", "जन्म तिथि"]);
+        const cClass = idxOf(["class", "classname", "कक्षा"]);
+        const cStream = idxOf(["stream", "संकाय"]);
+        const cRoll = idxOf(["roll no", "rollno", "roll", "क्रमांक"]);
+
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const cols = lines[i].split(",").map((c) => c.replace(/^"|"$/g, "").trim());
+          const name = cName !== -1 ? cols[cName] : "";
+          if (!name) continue;
+          const cls = cClass !== -1 ? cols[cClass].replace(/[^\d]/g, "") : "11";
+          const stream = cStream !== -1 && cols[cStream] ? cols[cStream] : (cls === "9" || cls === "10" ? "NA" : "Arts");
+          const roll = cRoll !== -1 ? (parseInt(cols[cRoll], 10) || 0) : 0;
+          const dob = cDob !== -1 ? window.PortalDB.normalizeDateStr(cols[cDob]) : "";
+          const code = cCode !== -1 ? cols[cCode].replace(/^'/, "") : "";
+          const studentId = code || `${cls}_${stream}_${roll}_${dob}`;
+
+          rows.push({
+            student_id: studentId,
+            student_code: code || null,
+            student_name: name,
+            father_name: cFather !== -1 ? cols[cFather] : "",
+            dob,
+            class_name: cls,
+            stream,
+            roll_no: roll,
+            subjects: window.PortalDB.getDefaultSubjects(cls, stream)
+          });
+        }
+
+        try {
+          const res = await window.PortalDB.bulkImportStudents(rows);
+          msg.innerHTML = `<span style="color:#6ee7b7;">✅ Successfully synced ${res.importedCount} students to Supabase PostgreSQL!</span>`;
+        } catch (err) {
+          msg.innerHTML = `<span style="color:#fca5a5;">❌ ${err.message}</span>`;
+        }
+      }
+
+      document.addEventListener("DOMContentLoaded", init);
+
+      return {
+        openSupabaseModal,
+        closeSupabaseModal,
+        saveAndTestSupabase,
+        launchExam,
+        refreshMonitor,
+        endExam,
+        exportCsv,
+        resetPin,
+        importCsvToSupabase
+      };
+    })();
+  </script>
+</body>
+</html>
