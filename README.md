@@ -1,30 +1,57 @@
 # 🎓 U.H.S. Kaparpura — Gamified Student Learning Portal & Live Exam Host
 
-Standalone repository (`uhskaparpura-student-portal`) powered by **Supabase PostgreSQL + Supabase Realtime WebSockets**, completely isolated from the public website (`uhskaparpurakanti-website`) and admin API (`uhskaparpura-admin-api`).
+Standalone repository ([`EternalStud/uhskaparpura-student-portal`](https://github.com/EternalStud/uhskaparpura-student-portal)) powered by **Supabase PostgreSQL (`lvrsanukztinwqrgivth`) + Supabase Realtime WebSockets**, completely isolated from the public website (`uhskaparpurakanti-website`) and admin API (`uhskaparpura-admin-api`).
 
 ---
 
-## 🚀 First-Time Setup Guide (Step-by-Step in 3 Minutes)
+## 🍎 Working Across School Windows PC & Home Mac Mini
 
-### Step 1: Create Your Free Supabase PostgreSQL Database
-1. Go to **[https://supabase.com](https://supabase.com)** and click **Start your project** (Sign in with your GitHub account).
-2. Click **New Project**:
-   - **Name**: `uhskaparpura-student-portal`
-   - **Database Password**: Create any strong password
-   - **Region**: `South Asia (Mumbai)` (`ap-south-1`)
-   - **Plan**: Free ($0/month)
-3. Once the project finishes provisioning (~60 seconds), click **SQL Editor** in the left sidebar.
-4. Open [`supabase/schema.sql`](./supabase/schema.sql) from this repository, **copy the entire SQL script**, paste it into the Supabase SQL Editor, and click **Run**.
-   - This creates `portal_students`, `portal_live_exams`, and `portal_live_participants`, enables **Supabase Realtime WebSockets**, and seeds a sample student (`202410141306317` — Ankit Kumar, Class 11 Arts, Roll 2).
+### 1. First-Time Clone on Mac Mini (macOS)
+Open **Terminal** on your Mac Mini and run:
 
-### Step 2: Copy Your Supabase Project URL & Anon Public Key
-1. In your Supabase Dashboard, click **Project Settings (⚙️ gear icon at bottom left) → API (or Data API)**.
-2. Copy two values:
-   - **Project URL**: Looks like `https://xxxxxxxxxxxx.supabase.co`
-   - **Project API Keys → `anon` `public` key**: Starts with `eyJhbGciOiJIUzI1NiIsInR5cCI6...`
-3. Connect them in either of two ways:
-   - **Option A (In-Browser 1-Click)**: Open `index.html` or `teacher-host.html`, click the **`🟠 Connect Supabase DB`** button in the top-right corner, paste your URL & Anon Key, and click **Save & Test Connection**.
-   - **Option B (Permanent in Code)**: Paste them into [`config.js`](./config.js) under `SUPABASE_URL` and `SUPABASE_ANON_KEY`, commit, and push to GitHub.
+```bash
+mkdir -p ~/Projects/SchoolWeb
+cd ~/Projects/SchoolWeb
+git clone https://github.com/EternalStud/uhskaparpura-student-portal.git
+cd uhskaparpura-student-portal
+
+# Recommended once on macOS to prevent Windows CRLF vs macOS LF line-ending warnings:
+git config core.autocrlf input
+
+# Start local development server on port 8080:
+python3 -m http.server 8080
+```
+Open in your browser on Mac Mini:
+- **Student Portal**: [http://localhost:8080/index.html](http://localhost:8080/index.html)
+- **Teacher Live Exam Host**: [http://localhost:8080/teacher-host.html](http://localhost:8080/teacher-host.html)
+
+### 2. Switching Between School & Home
+- **When starting work (School or Home)**:
+  ```bash
+  git pull origin main
+  ```
+- **When finishing work (School or Home)**:
+  ```bash
+  git add .
+  git commit -m "Describe changes"
+  git push origin main
+  ```
+
+### 3. Prompt for AI Assistant on Mac Mini
+When opening this folder on your Mac Mini, simply tell the AI assistant:
+> *"Please read `studentPortalsofar.md` and `studentportal.md` to understand the full architecture, Supabase PostgreSQL setup, and current progress."*
+
+---
+
+## 🗄️ Live Supabase PostgreSQL Details
+
+- **Project ID**: `lvrsanukztinwqrgivth`
+- **Project URL**: `https://lvrsanukztinwqrgivth.supabase.co`
+- **Schema File**: [`supabase/schema.sql`](./supabase/schema.sql) (Already executed & live)
+- **Frontend Config**: [`config.js`](./config.js) (Already pre-configured)
+- **Demo Student Login**:
+  - **Student Code Mode**: `202410141306317` (*Ankit Kumar — Class 11 Arts, Roll 2*)
+  - **Details Mode**: Class `11`, Stream `Arts`, Roll `2`, DOB `01-01-2011`
 
 ---
 
@@ -41,7 +68,7 @@ uhskaparpura-student-portal/
 ├── data/
 │   └── curriculum.js       # Bilingual (Hindi + English) ICT Lab & BSEB Curriculum Bank
 ├── supabase/
-│   └── schema.sql          # Ready-to-run PostgreSQL DDL + RLS + Realtime Publication
+│   └── schema.sql          # PostgreSQL DDL + RLS + Realtime Publication + Seed Data
 ├── studentportal.md        # Master Architecture & Product Blueprint
-└── studentPortalsofar.md   # Implementation Progress Tracker (School <-> Home Sync)
+└── studentPortalsofar.md   # Implementation Progress Tracker & Mac Mini / Windows Sync Guide
 ```

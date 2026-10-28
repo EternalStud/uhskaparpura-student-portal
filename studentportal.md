@@ -3,6 +3,9 @@
 > **Master Architectural & Product Specification**  
 > **Target Audience**: Class 9, 10, 11 & 12 Students of **U.H.S. Kaparpura, Kanti, Muzaffarpur** (Phase 1–3), designed with multi-tenant scalability for **1,000–5,000+ students** across Bihar Board (BSEB) and CBSE schools (Phase 4).  
 > **Core Mission**: Transform every minute a student spends in the ICT Lab or on their phone into **measurable practical computer skills** and **higher marks in the Bihar Board (BSEB) examinations**.
+>
+> **Live Standalone GitHub Repo**: https://github.com/EternalStud/uhskaparpura-student-portal`n> **Live Supabase PostgreSQL Project**: lvrsanukztinwqrgivth (https://lvrsanukztinwqrgivth.supabase.co)
+> **Cross-Device Sync (Windows School PC & Home Mac Mini)**: See [studentPortalsofar.md](./studentPortalsofar.md) for current build status and macOS/Windows terminal commands.
 
 ---
 
