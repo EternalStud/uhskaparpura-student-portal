@@ -1,7 +1,19 @@
 # 📊 U.H.S. Kaparpura — Student Portal Progress & Cross-Device Continuity (`studentPortalsofar.md`)
 
-> **Last Updated**: 2026-10-28
+> **Last Updated**: 2026-11-06 (Live Production on Vercel + Cloudflare Subdomain + Supabase PostgreSQL)
 > **Purpose**: Single source of truth for seamless development across **School Windows PC** and **Home Mac Mini (macOS)**. Any developer or AI coding agent reading this file + [`studentportal.md`](./studentportal.md) has 100% context to continue immediately.
+
+---
+
+## 🌐 Live Production Deployment Endpoints
+
+| Service | Live URL / Endpoint | Details |
+|---|---|---|
+| **Production Domain** | **[`https://students.uhskaparpurakanti.in`](https://students.uhskaparpurakanti.in)** | Custom subdomain via Cloudflare DNS CNAME pointing to Vercel edge |
+| **Vercel Direct URL** | **[`https://uhskaparpura-student-portal.vercel.app`](https://uhskaparpura-student-portal.vercel.app)** | Vercel Hobby production deployment with auto-CI/CD from GitHub |
+| **Teacher Live Host** | **[`https://students.uhskaparpurakanti.in/teacher-host`](https://students.uhskaparpurakanti.in/teacher-host)** | Live evaluation & projector monitor with Realtime WebSockets |
+| **Database & Realtime** | `https://lvrsanukztinwqrgivth.supabase.co` | Supabase PostgreSQL (`portal_students`, `portal_live_exams`, `portal_live_participants`) |
+| **SchoolDB API Bridge**| `https://script.google.com/macros/s/AKfycbwQtEdZ-Y-NIgFFoWCmqQap-hCdfHk6lTFjSqswH-bOS75MkPr4PFz31S-TuFea9KE/exec` | Read-only GAS endpoint for first-time student verification |
 
 ---
 
@@ -23,13 +35,17 @@ git clone https://github.com/EternalStud/uhskaparpurakanti-website.git
 git clone https://github.com/EternalStud/uhskaparpura-admin-web.git
 git clone https://github.com/EternalStud/uhskaparpura-admin-api.git
 
-# Launch local web server on Mac Mini (macOS comes with python3 pre-installed)
+# Recommended once on macOS to prevent Windows CRLF vs macOS LF line-ending warnings:
 cd ~/Projects/SchoolWeb/uhskaparpura-student-portal
+git config core.autocrlf input
+
+# Launch local web server on Mac Mini (macOS comes with python3 pre-installed)
 python3 -m http.server 8080
 ```
 Then open in Safari / Chrome on your Mac Mini:
-- **Student Portal**: `http://localhost:8080/index.html`
-- **Teacher Live Exam Host**: `http://localhost:8080/teacher-host.html`
+- **Student Portal (Local)**: `http://localhost:8080/index.html`
+- **Teacher Live Exam Host (Local)**: `http://localhost:8080/teacher-host.html`
+- **Live Production URL**: `https://students.uhskaparpurakanti.in`
 
 ### 2. Daily Sync Routine (School Windows PC ↔ Home Mac Mini)
 - **Before starting work (on Mac Mini or School PC)**:
@@ -42,8 +58,7 @@ Then open in Safari / Chrome on your Mac Mini:
   git commit -m "Describe what you built or updated"
   git push origin main
   ```
-- **Line Endings Note (Windows CRLF vs macOS LF)**:
-  On Mac Mini, run `git config --global core.autocrlf input` once so Git handles Windows/macOS line endings cleanly without diff noise.
+  *(Pushing to `origin main` automatically rebuilds and deploys to `https://students.uhskaparpurakanti.in` in ~15 seconds via Vercel CI/CD!)*
 
 ---
 
@@ -51,7 +66,7 @@ Then open in Safari / Chrome on your Mac Mini:
 
 | # | Repository | GitHub URL | Tech Stack & Live Backend | Current Status |
 |---|---|---|---|---|
-| **1** | **`uhskaparpura-student-portal`** *(This Repo)* | [`EternalStud/uhskaparpura-student-portal`](https://github.com/EternalStud/uhskaparpura-student-portal) | Vanilla SPA + **Supabase PostgreSQL & Realtime** (`lvrsanukztinwqrgivth`) + Read-only `SchoolDB` fallback | **Phase 1 Live & Verified** |
+| **1** | **`uhskaparpura-student-portal`** *(This Repo)* | [`EternalStud/uhskaparpura-student-portal`](https://github.com/EternalStud/uhskaparpura-student-portal) | Vanilla SPA + **Vercel** + **Cloudflare DNS** + **Supabase PostgreSQL & Realtime** (`lvrsanukztinwqrgivth`) | **Live on Production Domain** |
 | **2** | **`uhskaparpurakanti-website`** | [`EternalStud/uhskaparpurakanti-website`](https://github.com/EternalStud/uhskaparpurakanti-website) | Public School Website (`uhskaparpurakanti.in`) — Admission, Registration, Results | Clean (`ac0a30f`) — Untouched by Portal |
 | **3** | **`uhskaparpura-admin-web`** | [`EternalStud/uhskaparpura-admin-web`](https://github.com/EternalStud/uhskaparpura-admin-web) | Admin & Teacher Marks Entry Portal | Clean (`0bc40b4`) — Untouched by Portal |
 | **4** | **`uhskaparpura-admin-api`** | [`EternalStud/uhskaparpura-admin-api`](https://github.com/EternalStud/uhskaparpura-admin-api) | Google Apps Script API (Clasp `@149`, Deployment `AKfycbwQtEdZ-Y-NIgFFoWCmqQap-hCdfHk6lTFjSqswH-bOS75MkPr4PFz31S-TuFea9KE`) | Clean (`298e5dc`) — Untouched by Portal |
@@ -61,6 +76,7 @@ Then open in Safari / Chrome on your Mac Mini:
 ## 🔑 Live Credentials & Endpoints Reference
 
 ### 1. Supabase PostgreSQL Database (`uhskaparpura-student-portal`)
+- **Status**: **Healthy & Active** (Restored and verified with live student queries)
 - **Project ID**: `lvrsanukztinwqrgivth`
 - **Project URL**: `https://lvrsanukztinwqrgivth.supabase.co`
 - **Anon Public Key** (Configured in [`config.js`](./config.js)):
@@ -82,6 +98,16 @@ Then open in Safari / Chrome on your Mac Mini:
 
 ---
 
+## 🛡️ Security Audit & Hardening Status
+
+- **Cloudflare Security Audit Skill**: Installed at [`.agents/skills/security-audit/`](./.agents/skills/security-audit/) and globally on the development machine.
+- **API Keys**: No `service_role` or database master passwords exist in Git. Only the browser-safe `anon` key is used.
+- **Row-Level Security (RLS)**: Hardened in [`supabase/schema.sql`](./supabase/schema.sql) to allow `SELECT`, `INSERT`, and `UPDATE`, while strictly **blocking `DELETE`** requests from public anon clients.
+- **HTTP Headers**: Hardened in [`vercel.json`](./vercel.json) with `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and XSS protection.
+- **PII Privacy**: Sanitized all real student personal information from source and documentation.
+
+---
+
 ## ✅ What Has Been Built in Phase 1 (File-by-File)
 
 | File | Description & Implemented Features |
@@ -93,7 +119,8 @@ Then open in Safari / Chrome on your Mac Mini:
 | [`portal.css`](./portal.css) | Responsive dark-mode glassmorphic UI, virtual keyboard deck, spreadsheet table, BSEB Pink/Magenta OMR bubble sheet, and `@media print` certificate styles. |
 | [`teacher-host.html`](./teacher-host.html) | Teacher Live Exam Host & Projector Monitor: 4-digit Room PIN generator, live WebSocket participant table with `⚠️ Tab Switches` anti-cheat alerts, 1-click CSV/Excel result export, 1-click Student PIN Reset, and **Bulk `SchoolDB.csv` to Supabase PostgreSQL Importer**. |
 | [`data/curriculum.js`](./data/curriculum.js) | Bilingual (Hindi + English) curriculum modules: `ICT_01` (Computer Fundamentals & OS), `ICT_02` (MS Word Mastery), `ICT_03` (MS Excel & Formulas), `ICT_04` (Artificial Intelligence & Cyber Safety), `BSEB_SCI_01` (BSEB Science/Physics PYQs), and `BSEB_GK_01` (BSEB History/Polity/Hindi Grammar PYQs). |
-| [`supabase/schema.sql`](./supabase/schema.sql) | Idempotent PostgreSQL DDL + Indexes + RLS Policies + Realtime Publication + Seed Demo Student. |
+| [`supabase/schema.sql`](./supabase/schema.sql) | Idempotent PostgreSQL DDL + Indexes + Hardened RLS Policies (No public DELETE) + Realtime Publication. |
+| [`vercel.json`](./vercel.json) | Vercel production deployment configuration with clean URLs, security headers, and static caching. |
 
 ---
 
