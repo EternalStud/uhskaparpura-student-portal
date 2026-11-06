@@ -77,8 +77,8 @@ Then open in Safari / Chrome on your Mac Mini:
 - **How Hybrid Login Works ([`supabase-client.js`](./supabase-client.js))**:
   1. When a student logs in via **Student Code** OR **Class + Stream + Roll No + DOB**, `PortalDB.loginStudent()` queries `public.portal_students` in Supabase PostgreSQL first (<50ms response).
   2. If the student is not yet in `public.portal_students` (first-time login), it automatically calls `?action=public.registration.getStudent` on the live `SchoolDB` API in read-only mode, verifies the student, resolves their default BSEB + ICT subjects, and `UPSERT`s their record into Supabase PostgreSQL `public.portal_students`.
-- **Verified Test Student**:
-  - **Student Code**: `202410141306317` (`ANKIT KUMAR`, Father: `MANOJ THAKUR`, Class `11`, Stream `Arts`, Roll `2`, DOB `2011-01-01`).
+- **Demo Test Student**:
+  - **Student Code**: `DEMO_2026_001` (Class `11`, Stream `Arts`, Roll `1`, DOB `2011-01-01`).
 
 ---
 
@@ -93,7 +93,7 @@ Then open in Safari / Chrome on your Mac Mini:
 | [`portal.css`](./portal.css) | Responsive dark-mode glassmorphic UI, virtual keyboard deck, spreadsheet table, BSEB Pink/Magenta OMR bubble sheet, and `@media print` certificate styles. |
 | [`teacher-host.html`](./teacher-host.html) | Teacher Live Exam Host & Projector Monitor: 4-digit Room PIN generator, live WebSocket participant table with `⚠️ Tab Switches` anti-cheat alerts, 1-click CSV/Excel result export, 1-click Student PIN Reset, and **Bulk `SchoolDB.csv` to Supabase PostgreSQL Importer**. |
 | [`data/curriculum.js`](./data/curriculum.js) | Bilingual (Hindi + English) curriculum modules: `ICT_01` (Computer Fundamentals & OS), `ICT_02` (MS Word Mastery), `ICT_03` (MS Excel & Formulas), `ICT_04` (Artificial Intelligence & Cyber Safety), `BSEB_SCI_01` (BSEB Science/Physics PYQs), and `BSEB_GK_01` (BSEB History/Polity/Hindi Grammar PYQs). |
-| [`supabase/schema.sql`](./supabase/schema.sql) | Idempotent PostgreSQL DDL + Indexes + RLS Policies + Realtime Publication + Seed Student (`202410141306317`). |
+| [`supabase/schema.sql`](./supabase/schema.sql) | Idempotent PostgreSQL DDL + Indexes + RLS Policies + Realtime Publication + Seed Demo Student. |
 
 ---
 

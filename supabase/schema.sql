@@ -83,21 +83,58 @@ ALTER TABLE public.portal_students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.portal_live_exams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.portal_live_participants ENABLE ROW LEVEL SECURITY;
 
+-- Hardened RLS: Allow SELECT, INSERT, UPDATE, but strictly DISALLOW DELETE for public anon client
 DROP POLICY IF EXISTS "Allow public read/write on portal_students" ON public.portal_students;
-CREATE POLICY "Allow public read/write on portal_students"
-  ON public.portal_students FOR ALL
+DROP POLICY IF EXISTS "Allow public read on portal_students" ON public.portal_students;
+DROP POLICY IF EXISTS "Allow public insert on portal_students" ON public.portal_students;
+DROP POLICY IF EXISTS "Allow public update on portal_students" ON public.portal_students;
+
+CREATE POLICY "Allow public read on portal_students"
+  ON public.portal_students FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public insert on portal_students"
+  ON public.portal_students FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Allow public update on portal_students"
+  ON public.portal_students FOR UPDATE
   USING (true)
   WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow public read/write on portal_live_exams" ON public.portal_live_exams;
-CREATE POLICY "Allow public read/write on portal_live_exams"
-  ON public.portal_live_exams FOR ALL
+DROP POLICY IF EXISTS "Allow public read on portal_live_exams" ON public.portal_live_exams;
+DROP POLICY IF EXISTS "Allow public insert on portal_live_exams" ON public.portal_live_exams;
+DROP POLICY IF EXISTS "Allow public update on portal_live_exams" ON public.portal_live_exams;
+
+CREATE POLICY "Allow public read on portal_live_exams"
+  ON public.portal_live_exams FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public insert on portal_live_exams"
+  ON public.portal_live_exams FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Allow public update on portal_live_exams"
+  ON public.portal_live_exams FOR UPDATE
   USING (true)
   WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow public read/write on portal_live_participants" ON public.portal_live_participants;
-CREATE POLICY "Allow public read/write on portal_live_participants"
-  ON public.portal_live_participants FOR ALL
+DROP POLICY IF EXISTS "Allow public read on portal_live_participants" ON public.portal_live_participants;
+DROP POLICY IF EXISTS "Allow public insert on portal_live_participants" ON public.portal_live_participants;
+DROP POLICY IF EXISTS "Allow public update on portal_live_participants" ON public.portal_live_participants;
+
+CREATE POLICY "Allow public read on portal_live_participants"
+  ON public.portal_live_participants FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public insert on portal_live_participants"
+  ON public.portal_live_participants FOR INSERT
+  WITH CHECK (true);
+
+CREATE POLICY "Allow public update on portal_live_participants"
+  ON public.portal_live_participants FOR UPDATE
   USING (true)
   WITH CHECK (true);
 
@@ -119,30 +156,27 @@ BEGIN
   END IF;
 END $$;
 
--- 6. SEED VERIFIED SAMPLE STUDENT FROM SCHOOLDB FOR IMMEDIATE TESTING
+-- 6. SEED DEMO SAMPLE STUDENT FOR TESTING
 INSERT INTO public.portal_students (
   student_id, student_code, student_name, father_name, dob, gender,
   class_name, stream, roll_no, academic_year, medium, subjects,
   total_xp, weekly_xp, ict_xp, streak, badges
 ) VALUES (
-  '202410141306317',
-  '202410141306317',
-  'ANKIT KUMAR',
-  'MANOJ THAKUR',
+  'DEMO_2026_001',
+  'DEMO_2026_001',
+  'DEMO STUDENT',
+  'GUARDIAN NAME',
   '2011-01-01',
   'Male',
   '11',
   'Arts',
-  2,
+  1,
   '2026-27',
   'Hindi',
   '[
     {"id":"ICT_LAB","code":"ICT","name":"ICT Lab, MS Office & AI","hiName":"कंप्यूटर लैब, एमएस ऑफिस एवं AI","group":"Skill"},
     {"id":"11_ART_L1_HIN","code":"306","name":"Hindi","hiName":"हिन्दी","group":"Language 1"},
-    {"id":"11_ART_L2_ENG","code":"305","name":"English","hiName":"अंग्रेज़ी","group":"Language 2"},
-    {"id":"11_ART_ELE_HIS","code":"327","name":"History","hiName":"इतिहास","group":"Elective 1"},
-    {"id":"11_ART_ELE_POL","code":"322","name":"Political Science","hiName":"राजनीति विज्ञान","group":"Elective 2"},
-    {"id":"11_ART_ELE_SOC","code":"329","name":"Sociology","hiName":"समाजशास्त्र","group":"Elective 3"}
+    {"id":"11_ART_L2_ENG","code":"305","name":"English","hiName":"अंग्रेज़ी","group":"Language 2"}
   ]'::jsonb,
   25, 25, 0, 1, '["WELCOME_SCHOLAR"]'::jsonb
 ) ON CONFLICT (student_id) DO NOTHING;

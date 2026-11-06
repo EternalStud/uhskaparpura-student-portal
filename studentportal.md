@@ -81,7 +81,7 @@ flowchart TB
 
 ### 3.1 Dual Student Login (Consistent with Registration Portal)
 Students can log in via two tabs on the login screen:
-* **Tab A — By Student Code**: Enter `Class` + `Student Code` (e.g., `202410141306317`).
+* **Tab A — By Student Code**: Enter `Class` + `Student Code` (e.g., `DEMO_2026_001`).
 * **Tab B — By Roll No & DOB**: Enter `Class` (9, 10, 11, 12) + `Stream` (if Class 11/12: Arts/Science/Commerce) + `Roll No` + `Date of Birth (DD/MM/YYYY)`.
 
 ### 3.2 First-Login Handshake & Subject Auto-Discovery
@@ -97,7 +97,7 @@ Because multiple shifts of students use the same desktop computers in the ICT La
   * After first login, a student can set a simple 4-digit PIN (e.g., `1234`) so classmates who know their Roll Number cannot log into their account from another PC.
   * **1-Click Teacher PIN Reset**: If a student forgets their PIN, the Teacher Dashboard has a 1-click *"Reset PIN"* button next to the student's name.
 * **Prominent "Switch Student / Lab Logout" Bar**:
-  * Top navbar always displays: `👤 Ankit Kumar (Class 11 Arts • Roll 2) | 🔄 Switch Student (लॉगआउट)`.
+  * Top navbar always displays: `👤 Student Name (Class 11 Arts • Roll 2) | 🔄 Switch Student (लॉगआउट)`.
 * **ICT Lab "Buddy / Pair Mode" (Optional 2-Student Login)**:
   * Often in school computer labs, 2 students sit at 1 PC. A *"➕ Add Lab Partner (सहपाठी जोड़ें)"* button lets a second student log in alongside the primary student during practice modules so both receive lab attendance credit.
 
@@ -442,7 +442,7 @@ By storing chapters in clean JSON files, new chapters and questions can be added
       "id": "SB_EX_01",
       "title": {
         "hi": "मिशन 1: अंकित के कुल अंक (Total Marks) निकालें",
-        "en": "Mission 1: Calculate Ankit's Total Marks"
+        "en": "Mission 1: Calculate Student's Total Marks"
       },
       "instruction": {
         "hi": "सेल E2 में फॉर्मूला लिखकर हिंदी (B2), अंग्रेजी (C2) और गणित (D2) का योग निकालें।",

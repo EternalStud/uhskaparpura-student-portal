@@ -342,7 +342,7 @@ window.PORTAL_CURRICULUM = {
       excelTasks: [
         {
           id: "EX_TASK_1",
-          titleHi: "चैलेंज 1: अंकित के कुल अंक (Total Marks) निकालें",
+          titleHi: "चैलेंज 1: छात्र के कुल अंक (Total Marks) निकालें",
           titleEn: "Challenge 1: Calculate Total Marks Using =SUM",
           promptHi: "नीचे तालिका में B2 से B5 तक छात्र के 4 विषयों के अंक दिए गए हैं। कुल अंक निकालने के लिए सही फॉर्मूला लिखें:",
           promptEn: "Cells B2 to B5 contain marks in 4 subjects. Type the Excel formula to calculate the Total Marks:",

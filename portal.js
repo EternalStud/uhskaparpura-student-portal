@@ -139,7 +139,7 @@ const PortalApp = (function () {
 
   function fillDemo() {
     setLoginMode("CODE");
-    document.getElementById("loginStudentCode").value = "202410141306317";
+    document.getElementById("loginStudentCode").value = "";
   }
 
   async function handleLogin() {

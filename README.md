@@ -50,8 +50,8 @@ When opening this folder on your Mac Mini, simply tell the AI assistant:
 - **Schema File**: [`supabase/schema.sql`](./supabase/schema.sql) (Already executed & live)
 - **Frontend Config**: [`config.js`](./config.js) (Already pre-configured)
 - **Demo Student Login**:
-  - **Student Code Mode**: `202410141306317` (*Ankit Kumar — Class 11 Arts, Roll 2*)
-  - **Details Mode**: Class `11`, Stream `Arts`, Roll `2`, DOB `01-01-2011`
+  - **Student Code Mode**: `DEMO_2026_001`
+  - **Details Mode**: Class `11`, Stream `Arts`, Roll `1`, DOB `2011-01-01`
 
 ---
 
