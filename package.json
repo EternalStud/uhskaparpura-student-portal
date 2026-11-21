@@ -1,0 +1,48 @@
+{
+  "name": "students-of-bihar",
+  "version": "2.4.0",
+  "private": true,
+  "description": "Students of Bihar (Class 9-12) — Official BSEB Academic Learning, Assessment & School Portal",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "katex": "^0.16.21",
+    "lucide-react": "^0.487.0",
+    "mammoth": "^1.9.0",
+    "marked": "^15.0.7",
+    "next": "^15.3.2",
+    "otplib": "^12.0.1",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sanitize-html": "^2.16.0",
+    "tailwind-merge": "^2.6.0",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/katex": "^0.16.7",
+    "@types/node": "^22.15.3",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@types/sanitize-html": "^2.16.0",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.25.1",
+    "eslint-config-next": "^15.3.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}

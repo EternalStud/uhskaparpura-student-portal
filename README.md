@@ -1,85 +1,67 @@
-# 🎓 U.H.S. Kaparpura — Gamified Student Learning Portal & Live Exam Host
+# Students of Bihar (Class 9–12)
 
-Standalone repository ([`EternalStud/uhskaparpura-student-portal`](https://github.com/EternalStud/uhskaparpura-student-portal)) deployed on **Vercel** with custom domain **[`https://students.uhskaparpurakanti.in`](https://students.uhskaparpurakanti.in)** via Cloudflare DNS, backed by **Supabase PostgreSQL (`lvrsanukztinwqrgivth`) + Supabase Realtime WebSockets**.
-
----
-
-## 🌐 Live Production URLs
-
-* **Student Learning Portal**: [https://students.uhskaparpurakanti.in](https://students.uhskaparpurakanti.in)
-* **Vercel Direct URL**: [https://uhskaparpura-student-portal.vercel.app](https://uhskaparpura-student-portal.vercel.app)
-* **Teacher Live Exam Host & Projector**: [https://students.uhskaparpurakanti.in/teacher-host](https://students.uhskaparpurakanti.in/teacher-host)
+A bilingual (Hindi-first, English, and Dual mode) academic learning, visual study-notes, live examination, and school management platform built for **Bihar School Examination Board (BSEB)** Class 9–12 students, teachers, and government schools — launching with **Uchch Madhyamik Vidyalaya, Kaparpura (Kanti, Muzaffarpur)** as School #1.
 
 ---
 
-## 🍎 Working Across School Windows PC & Home Mac Mini
+## Highlights
 
-### 1. First-Time Clone on Mac Mini (macOS)
-Open **Terminal** on your Mac Mini and run:
-
-```bash
-mkdir -p ~/Projects/SchoolWeb
-cd ~/Projects/SchoolWeb
-git clone https://github.com/EternalStud/uhskaparpura-student-portal.git
-cd uhskaparpura-student-portal
-
-# Recommended once on macOS to prevent Windows CRLF vs macOS LF line-ending warnings:
-git config core.autocrlf input
-
-# Start local development server on port 8080:
-python3 -m http.server 8080
-```
-Open in your browser on Mac Mini:
-- **Student Portal (Local)**: [http://localhost:8080/index.html](http://localhost:8080/index.html)
-- **Teacher Live Exam Host (Local)**: [http://localhost:8080/teacher-host.html](http://localhost:8080/teacher-host.html)
-
-### 2. Switching Between School & Home
-- **When starting work (School or Home)**:
-  ```bash
-  git pull origin main
-  ```
-- **When finishing work (School or Home)**:
-  ```bash
-  git add .
-  git commit -m "Describe changes"
-  git push origin main
-  ```
-  *(Pushing to GitHub triggers an automatic Vercel deployment to `students.uhskaparpurakanti.in` in ~15 seconds!)*
-
-### 3. Prompt for AI Assistant on Mac Mini
-When opening this folder on your Mac Mini, simply tell the AI assistant:
-> *"Please read `studentPortalsofar.md` and `studentportal.md` to understand the project architecture, Supabase PostgreSQL setup, and current progress."*
+- **Built for Bihar Board (BSEB) Class 9–12:** Official subject rules for Class 9–10 (Mandatory + MIL + SIL) and Class 11–12 (Arts, Science, Commerce streams), chapter weightage, and BSEB marking schemes.
+- **Visual, Simple-to-Deep Chapter Notes:** 30-second bilingual mindmaps, relatable everyday analogies, declarative bilingual SVG diagrams, KaTeX equations, printable sheets, and Hindi/English Web Speech Read-Aloud.
+- **One-Stop Practice Studio:** Flashcards, Match-the-Pairs, Diagram Labeling, tiered MCQs (Foundation / Board / Topper), and 2-Mark / 5-Mark model answers with memory cues.
+- **Live PIN & Scheduled Classroom Exams:** Immutable exam snapshots, deterministic per-student question/option shuffling, classroom Projector Monitor via scoped Realtime, and formula-safe Excel marksheet export.
+- **Open Class & Subject Doubt Boards:** Zero private messaging; transparent school-scoped boards answered exclusively by verified school teachers.
+- **e-Shikshakosh Ready:** Privacy-first student and teacher roster sync (automatically discards Aadhaar and Social Category in memory; stores only hashed/last-4 teacher mobile digits).
 
 ---
 
-## 🗄️ Live Supabase PostgreSQL Details
+## Tech Stack
 
-- **Status**: **Healthy & Active**
-- **Project ID**: `lvrsanukztinwqrgivth`
-- **Project URL**: `https://lvrsanukztinwqrgivth.supabase.co`
-- **Schema File**: [`supabase/schema.sql`](./supabase/schema.sql)
-- **Frontend Config**: [`config.js`](./config.js)
-- **Demo Student Login**:
-  - **Student Code Mode**: `DEMO_2026_001`
-  - **Details Mode**: Class `11`, Stream `Arts`, Roll `1`, DOB `2011-01-01`
+- **Framework:** Next.js 15 (App Router), React 19, TypeScript (strict)
+- **Styling & Typography:** Tailwind CSS v3.4, Plus Jakarta Sans, Noto Sans Devanagari, Lucide React icons, KaTeX
+- **Database & Scoped Realtime:** Supabase PostgreSQL with strict default-deny RLS
+- **Media Vault:** Private Google Drive (5 TB Google One) via server-side OAuth2 resumable uploads & streaming proxy
+- **Validation & Security:** Zod, bcryptjs, otplib (TOTP 2FA), Cloudflare Turnstile, `sanitize-html`
 
 ---
 
-## 📦 Repository Structure
+## Local Development Setup
 
-```text
-uhskaparpura-student-portal/
-├── index.html              # Gamified Student Portal SPA
-├── teacher-host.html       # Teacher Live Exam Host, Projector Monitor & CSV Bulk Importer
-├── config.js               # Supabase URL, Anon Key & Read-Only SchoolDB Bridge URL
-├── supabase-client.js      # Supabase PostgreSQL + Realtime WebSocket Data Layer
-├── portal.js               # Student Portal UI & 5 Interactive Game/Simulator Controllers
-├── portal.css              # Glassmorphic Dark UI, Pink BSEB OMR Sheet & Print Certificate CSS
-├── vercel.json             # Vercel deployment configuration with clean URLs & security headers
-├── data/
-│   └── curriculum.js       # Bilingual (Hindi + English) ICT Lab & BSEB Curriculum Bank
-├── supabase/
-│   └── schema.sql          # PostgreSQL DDL + Hardened RLS + Realtime Publication
-├── studentportal.md        # Master Architecture & Product Blueprint
-└── studentPortalsofar.md   # Implementation Progress Tracker & Mac Mini / Windows Sync Guide
-```
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment variables**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Fill in your Supabase, cryptographic secrets (`openssl rand -hex 32`), Google OAuth, and optional Turnstile keys in `.env.local`. Never commit `.env.local`.
+
+3. **Apply database migrations**
+   Run the SQL migrations in `supabase/migrations/` in order (`001_v2_multitenant_schema.sql`, `002_bseb_seed_catalog.sql`, `003_gold_curriculum_seed.sql`) against your Supabase project.
+
+4. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Scripts
+
+| Command | Purpose |
+| :--- | :--- |
+| `npm run dev` | Start Next.js development server |
+| `npm run build` | Build production bundle |
+| `npm run start` | Start production server |
+| `npm run typecheck` | Run strict TypeScript checking (`tsc --noEmit`) |
+| `npm run lint` | Run ESLint checks |
+
+---
+
+## Documentation
+
+- Architecture, security model, and multi-tenant data design: [SYSTEM_DESIGN.md](./SYSTEM_DESIGN.md)
+- Previous legacy v1 static prototype is preserved in Git under tag `legacy-v1-archive`.

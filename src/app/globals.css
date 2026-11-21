@@ -1,0 +1,387 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   Students of Bihar (9-12) — Editorial Paper-First Design System Tokens
+   ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* Space-separated RGB channels for Tailwind v3.4 /opacity modifier support */
+  --bg-canvas-rgb: 250 250 249;        /* #FAFAF9 */
+  --bg-surface-rgb: 255 255 255;       /* #FFFFFF */
+  --bg-surface-subtle-rgb: 244 244 240;/* #F4F4F0 */
+  --bg-surface-warm-rgb: 255 251 235;  /* #FFFBEB */
+
+  --text-ink-rgb: 15 23 42;            /* #0F172A */
+  --text-secondary-rgb: 51 65 85;      /* #334155 */
+  --text-muted-rgb: 100 116 139;       /* #64748B */
+
+  --border-hairline-rgb: 229 231 235;  /* #E5E7EB */
+  --border-strong-rgb: 203 213 225;    /* #CBD5E1 */
+
+  --accent-indigo-rgb: 30 58 138;      /* #1E3A8A */
+  --accent-indigo-hover-rgb: 23 45 107;/* #172D6B */
+  --accent-indigo-ink-rgb: 30 58 138;  /* #1E3A8A */
+
+  --accent-amber-rgb: 217 119 6;       /* #D97706 */
+  --accent-amber-ink-rgb: 146 64 14;   /* #92400E */
+
+  --accent-emerald-rgb: 5 150 105;     /* #059669 */
+  --accent-emerald-ink-rgb: 6 95 70;   /* #065F46 */
+
+  --accent-crimson-rgb: 220 38 38;     /* #DC2626 */
+  --accent-crimson-ink-rgb: 153 27 27; /* #991B1B */
+
+  /* Resolved CSS variables for prose/base rules */
+  --bg-canvas: rgb(var(--bg-canvas-rgb));
+  --bg-surface: rgb(var(--bg-surface-rgb));
+  --bg-surface-subtle: rgb(var(--bg-surface-subtle-rgb));
+  --bg-surface-warm: rgb(var(--bg-surface-warm-rgb));
+
+  --text-ink: rgb(var(--text-ink-rgb));
+  --text-secondary: rgb(var(--text-secondary-rgb));
+  --text-muted: rgb(var(--text-muted-rgb));
+
+  --border-hairline: rgb(var(--border-hairline-rgb));
+  --border-strong: rgb(var(--border-strong-rgb));
+
+  --accent-indigo: rgb(var(--accent-indigo-rgb));
+  --accent-indigo-hover: rgb(var(--accent-indigo-hover-rgb));
+  --accent-indigo-soft: #EEF2FF;
+  --accent-indigo-ink: rgb(var(--accent-indigo-ink-rgb));
+
+  --accent-amber: rgb(var(--accent-amber-rgb));
+  --accent-amber-soft: #FEF3C7;
+  --accent-amber-ink: rgb(var(--accent-amber-ink-rgb));
+
+  --accent-emerald: rgb(var(--accent-emerald-rgb));
+  --accent-emerald-soft: #ECFDF5;
+  --accent-emerald-ink: rgb(var(--accent-emerald-ink-rgb));
+
+  --accent-crimson: rgb(var(--accent-crimson-rgb));
+  --accent-crimson-soft: #FEF2F2;
+  --accent-crimson-ink: rgb(var(--accent-crimson-ink-rgb));
+}
+
+/* Calm Night Study Dark Mode */
+.dark {
+  color-scheme: dark;
+
+  --bg-canvas-rgb: 15 20 30;           /* #0F141E */
+  --bg-surface-rgb: 22 30 46;          /* #161E2E */
+  --bg-surface-subtle-rgb: 30 41 59;   /* #1E293B */
+  --bg-surface-warm-rgb: 36 30 20;     /* #241E14 */
+
+  --text-ink-rgb: 241 245 249;         /* #F1F5F9 */
+  --text-secondary-rgb: 203 213 225;   /* #CBD5E1 */
+  --text-muted-rgb: 148 163 184;       /* #94A3B8 */
+
+  --border-hairline-rgb: 39 52 73;     /* #273449 */
+  --border-strong-rgb: 59 77 104;      /* #3B4D68 */
+
+  --accent-indigo-rgb: 59 108 232;     /* #3B6CE8 */
+  --accent-indigo-hover-rgb: 46 92 214;/* #2E5CD6 */
+  --accent-indigo-ink-rgb: 147 197 253;/* #93C5FD */
+
+  --accent-amber-rgb: 245 158 11;      /* #F59E0B */
+  --accent-amber-ink-rgb: 252 211 77;  /* #FCD34D */
+
+  --accent-emerald-rgb: 16 185 129;    /* #10B981 */
+  --accent-emerald-ink-rgb: 110 231 183;/* #6EE7B7 */
+
+  --accent-crimson-rgb: 239 68 68;     /* #EF4444 */
+  --accent-crimson-ink-rgb: 252 165 165;/* #FCA5A5 */
+
+  --accent-indigo-soft: rgba(59, 108, 232, 0.16);
+  --accent-amber-soft: rgba(245, 158, 11, 0.15);
+  --accent-emerald-soft: rgba(16, 185, 129, 0.15);
+  --accent-crimson-soft: rgba(239, 68, 68, 0.15);
+}
+
+@layer base {
+  html {
+    background-color: var(--bg-canvas);
+    color: var(--text-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-ink);
+    font-family: var(--font-plus-jakarta), var(--font-noto-devanagari), system-ui, -apple-system, sans-serif;
+    line-height: 1.65;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* Accessible focus styling for keyboard & ICT Lab PC users */
+  *:focus-visible {
+    outline: 2px solid var(--accent-indigo);
+    outline-offset: 2px;
+  }
+
+  /* Prevent iOS/Android mobile auto-zoom on form controls */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea {
+      font-size: 0.9375rem;
+    }
+  }
+}
+
+/* ============================================================================
+   Textbook Reading Prose (Generous Devanagari Line Height & Editorial Hierarchy)
+   ============================================================================ */
+.prose-textbook {
+  color: var(--text-ink);
+  font-size: 1.03125rem;
+  line-height: 1.85;
+  max-width: 72ch;
+}
+
+.prose-textbook > * + * {
+  margin-top: 0.95rem;
+}
+
+.prose-textbook h1,
+.prose-textbook h2,
+.prose-textbook h3,
+.prose-textbook h4 {
+  color: var(--text-ink);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-textbook h1 {
+  font-size: 1.5rem;
+}
+
+.prose-textbook h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.prose-textbook h3 {
+  font-size: 1.1rem;
+}
+
+.prose-textbook p {
+  color: var(--text-ink);
+}
+
+.prose-textbook strong {
+  color: var(--text-ink);
+  font-weight: 700;
+}
+
+.prose-textbook ul,
+.prose-textbook ol {
+  padding-left: 1.45rem;
+}
+
+.prose-textbook ul {
+  list-style-type: disc;
+}
+
+.prose-textbook ol {
+  list-style-type: decimal;
+}
+
+.prose-textbook li {
+  margin-top: 0.4rem;
+  padding-left: 0.2rem;
+}
+
+.prose-textbook li::marker {
+  color: var(--accent-indigo-ink);
+  font-weight: 600;
+}
+
+.prose-textbook blockquote {
+  border-left: 3px solid var(--accent-amber);
+  background-color: var(--bg-surface-warm);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--text-secondary);
+}
+
+.prose-textbook code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.prose-textbook pre {
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: 0.65rem;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+}
+
+.prose-textbook pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.prose-textbook table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.9375rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose-textbook thead th {
+  background-color: var(--bg-surface-subtle);
+  color: var(--text-ink);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.625rem 0.85rem;
+  border: 1px solid var(--border-hairline);
+}
+
+.prose-textbook tbody td {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border-hairline);
+  vertical-align: top;
+}
+
+.prose-textbook hr {
+  border: none;
+  border-top: 1px solid var(--border-hairline);
+  margin: 1.5rem 0;
+}
+
+/* ============================================================================
+   KaTeX Polish (Clean Math on Budget Mobile Screens & Dark Mode)
+   ============================================================================ */
+.katex {
+  font-size: 1.06em;
+  color: var(--text-ink);
+}
+
+.katex-display {
+  margin: 1rem 0 !important;
+  padding: 0.75rem 0.9rem;
+  background-color: var(--bg-surface-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: 0.65rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.katex-display > .katex {
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   Utility Helpers
+   ============================================================================ */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================================
+   Clean Print Stylesheet (Chapter Notes, Lesson Plans & Merit Certificates)
+   ============================================================================ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body,
+  .dark {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    color-scheme: light !important;
+    font-size: 11pt !important;
+    line-height: 1.55 !important;
+  }
+
+  .no-print,
+  nav,
+  aside,
+  header[data-app-chrome="true"],
+  footer[data-app-chrome="true"],
+  [role="dialog"],
+  [data-toast-container="true"] {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-sheet,
+  article,
+  section {
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+    border-color: #CBD5E1 !important;
+    max-width: 100% !important;
+  }
+
+  .print-avoid-break,
+  .katex-display,
+  blockquote,
+  table,
+  figure,
+  svg {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+    color: #000000 !important;
+  }
+
+  a {
+    color: #000000 !important;
+    text-decoration: none !important;
+  }
+
+  .katex-display {
+    background: #F8FAFC !important;
+    border: 1px solid #CBD5E1 !important;
+  }
+}

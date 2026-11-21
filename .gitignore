@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Deployment
+.vercel/
+
+# Environment variables (NEVER commit secrets; only .env.example is tracked)
+.env
+.env*
+!.env.example
+
+# CRITICAL: Private handwritten design notes & real student/teacher Excel PII MUST NEVER be committed
+design/
+**/*.xlsx
+**/*.xls
+._*
+.DS_Store
+
+# TypeScript & test artifacts
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# Logs & editors
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.idea/
+.vscode/*
+!.vscode/extensions.json
