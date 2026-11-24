@@ -125,9 +125,11 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
         <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
             {subject && (
-              <Badge variant="indigo">
-                {t(`कक्षा ${subject.class_num}`, `Class ${subject.class_num}`)} ·{" "}
-                {t(subject.name_hi, subject.name_en)}
+              <Badge variant={subject.class_num === 0 ? "emerald" : "indigo"}>
+                {subject.class_num === 0
+                  ? t("कक्षा 9–12 · कौशल लैब", "Classes 9–12 · Skill Lab")
+                  : t(`कक्षा ${subject.class_num}`, `Class ${subject.class_num}`)}{" "}
+                · {t(subject.name_hi, subject.name_en)}
               </Badge>
             )}
             <Badge variant="neutral">

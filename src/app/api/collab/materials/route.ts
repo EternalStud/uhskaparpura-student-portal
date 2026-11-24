@@ -245,7 +245,7 @@ export async function POST(request: Request) {
   const [{ data: subject }, chapterRes] = await Promise.all([
     supabase
       .from("subjects")
-      .select("id, class_num, name_hi, name_en")
+      .select("id, class_num, name_hi, name_en, syllabus_alias_of")
       .eq("id", input.subjectId)
       .maybeSingle(),
     input.chapterId
@@ -260,7 +260,13 @@ export async function POST(request: Request) {
   if (!subject) {
     return jsonNoStore({ error: "Selected subject does not exist." }, { status: 400 });
   }
-  if (input.chapterId && (!chapterRes.data || chapterRes.data.subject_id !== subject.id)) {
+  const canonicalSubjectId = subject.syllabus_alias_of ?? subject.id;
+  if (
+    input.chapterId &&
+    (!chapterRes.data ||
+      (chapterRes.data.subject_id !== subject.id &&
+        chapterRes.data.subject_id !== canonicalSubjectId))
+  ) {
     return jsonNoStore(
       { error: "Selected chapter does not belong to the chosen subject." },
       { status: 400 }
@@ -330,6 +336,11 @@ export async function POST(request: Request) {
     verifiedMediaId = verified.media.id;
   }
 
+  const materialClassNum: 9 | 10 | 11 | 12 =
+    subject.class_num === 0
+      ? session.teacher?.assignedClasses?.[0] ?? 10
+      : subject.class_num;
+
   const { data: created, error: insertErr } = await supabase
     .from("teacher_materials")
     .insert({
@@ -337,7 +348,7 @@ export async function POST(request: Request) {
       teacher_id: session.principalId,
       subject_id: subject.id,
       chapter_id: input.chapterId ?? null,
-      class_num: subject.class_num,
+      class_num: materialClassNum,
       title: cleanTitle,
       description: cleanDescription || null,
       material_type: input.materialType,

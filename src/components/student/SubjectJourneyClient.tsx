@@ -9,20 +9,26 @@ import {
   CheckCircle2,
   Clock,
   Dumbbell,
+  Layers,
   Medal,
   Sparkles,
 } from "lucide-react";
 import type { ChapterRow, SubjectRow } from "@/types/database";
-import type { ChapterMedal } from "@/app/api/student/_helpers";
+import type { ChapterMedal, FourStageProgressResult } from "@/lib/progress/four-stage";
 import { BiText, useLanguage } from "@/components/providers/LanguageProvider";
 import { Badge, Button, Card } from "@/components/ui";
+import { FourStageProgressBar } from "./FourStageProgressBar";
 import { SubjectIcon } from "./SubjectIcon";
 import { cn } from "@/components/ui/cn";
 
 export interface JourneyChapterItem extends ChapterRow {
   hasRichNotes: boolean;
   practiceCount: number;
+  playLabCount?: number;
   notesCompleted: boolean;
+  playCompleted?: boolean;
+  subjectiveCompleted?: boolean;
+  fourStage?: FourStageProgressResult;
   masteryPct: number;
   medal: ChapterMedal;
 }
@@ -36,11 +42,16 @@ export function SubjectJourneyClient({
 }) {
   const { t } = useLanguage();
 
-  const completedCount = chapters.filter((c) => c.notesCompleted && c.masteryPct >= 60).length;
+  const completedCount = chapters.filter(
+    (c) => (c.fourStage ? c.fourStage.completedStages >= 3 : c.notesCompleted && c.masteryPct >= 60)
+  ).length;
+  const playCompletedCount = chapters.filter((c) => c.playCompleted).length;
   const avgMastery =
     chapters.length > 0
       ? Math.round(chapters.reduce((acc, c) => acc + c.masteryPct, 0) / chapters.length)
       : 0;
+
+  const isUniversal = subject.class_num === 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -64,8 +75,10 @@ export function SubjectJourneyClient({
             </span>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <Badge variant="indigo">
-                  {t(`कक्षा ${subject.class_num}`, `Class ${subject.class_num}`)}
+                <Badge variant={isUniversal ? "emerald" : "indigo"}>
+                  {isUniversal
+                    ? t("कक्षा 9–12 · कौशल एवं नींव लैब", "Classes 9–12 · Skill & Foundation Lab")
+                    : t(`कक्षा ${subject.class_num}`, `Class ${subject.class_num}`)}
                 </Badge>
                 <Badge variant="neutral">
                   {t("कोड", "Code")}: {subject.bseb_code}
@@ -74,14 +87,25 @@ export function SubjectJourneyClient({
               <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">
                 <BiText hi={subject.name_hi} en={subject.name_en} />
               </h1>
+              <p className="text-xs sm:text-sm text-ink-secondary mt-1">
+                {t(
+                  "हर अध्याय में 4 चरण: 1. विज़ुअल समझ → 2. खेल-खेल लैब → 3. गाइडेड क्विज़ → 4. बोर्ड दक्षता",
+                  "4 genuine stages per chapter: 1. Understand → 2. Play Lab → 3. Guided Quiz → 4. Board Mastery"
+                )}
+              </p>
             </div>
           </div>
 
-          <div className="rounded-lg bg-surface border border-hairline px-4 py-2.5 text-right">
+          <div className="rounded-lg bg-surface border border-hairline px-4 py-2.5 text-right space-y-0.5">
             <div className="text-xl font-bold text-indigo-ink">{avgMastery}%</div>
             <div className="text-xs text-ink-secondary">
-              {t(`${completedCount}/${chapters.length} अध्याय पूर्ण`, `${completedCount}/${chapters.length} completed`)}
+              {t(`${completedCount}/${chapters.length} अध्याय पूर्ण`, `${completedCount}/${chapters.length} mastered`)}
             </div>
+            {playCompletedCount > 0 && (
+              <div className="text-[11px] font-semibold text-emerald-ink">
+                {t(`${playCompletedCount} खेल लैब पूर्ण`, `${playCompletedCount} play labs done`)}
+              </div>
+            )}
           </div>
         </div>
       </Card>
@@ -153,6 +177,11 @@ export function SubjectJourneyClient({
                             {t("विज़ुअल नोट्स तैयार", "Visual Notes Ready")}
                           </Badge>
                         )}
+                        {(ch.playLabCount ?? 0) > 0 && (
+                          <Badge variant="indigo" icon={<Layers className="h-3 w-3" />}>
+                            {t(`${ch.playLabCount} खेल लैब`, `${ch.playLabCount} Play Labs`)}
+                          </Badge>
+                        )}
                         <Badge variant="amber" icon={<Award className="h-3 w-3" />}>
                           {t(`${ch.bseb_weightage_marks} अंक`, `${ch.bseb_weightage_marks} Marks`)}
                         </Badge>
@@ -183,6 +212,11 @@ export function SubjectJourneyClient({
                     </div>
                   </div>
 
+                  {/* 4-Stage Compact Progress Chips */}
+                  {ch.fourStage && (
+                    <FourStageProgressBar fourStage={ch.fourStage} compact />
+                  )}
+
                   {/* Progress Bar */}
                   <div className="h-1.5 w-full rounded-full bg-surface-subtle overflow-hidden">
                     <div
@@ -202,7 +236,7 @@ export function SubjectJourneyClient({
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="text-xs text-ink-muted">
                       {ch.practiceCount > 0
-                        ? t(`${ch.practiceCount} अभ्यास प्रश्न उपलब्ध`, `${ch.practiceCount} practice items ready`)
+                        ? t(`${ch.practiceCount} अभ्यास प्रश्न व लैब उपलब्ध`, `${ch.practiceCount} labs & practice items ready`)
                         : t("अध्याय पाठ्यक्रम सूचीबद्ध", "Chapter indexed in syllabus")}
                     </span>
 
@@ -222,7 +256,7 @@ export function SubjectJourneyClient({
                           variant={ch.practiceCount > 0 ? "outline" : "ghost"}
                           leftIcon={<Dumbbell className="h-4 w-4" />}
                         >
-                          {t("अभ्यास करें", "Practice")}
+                          {t("खेल व अभ्यास", "Play & Practice")}
                         </Button>
                       </Link>
                     </div>

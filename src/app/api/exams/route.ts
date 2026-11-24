@@ -8,12 +8,15 @@ import {
 } from "@/lib/auth";
 import { sanitizePlainText } from "@/lib/sanitize/content";
 import { getCurrentAcademicYear } from "@/lib/time/ist";
-import { getStudentEnrolledSubjectIds } from "@/app/api/collab/_helpers";
+import {
+  getStudentAccessibleSubjectIds,
+  resolveSubjectAliasMap,
+} from "@/app/api/student/_helpers";
 import {
   areSolutionsUnlockedForStudent,
   buildExamQuestionsSnapshot,
 } from "@/app/api/exams/_engine";
-import type { ExamMode, ExamStatus, ExamStream } from "@/types/database";
+import type { ClassNum, ExamMode, ExamStatus, ExamStream } from "@/types/database";
 
 const customQuestionSchema = z.object({
   qHi: z.string().trim().min(3).max(2000),
@@ -40,6 +43,7 @@ const createExamSchema = z.object({
   examMode: z.enum(["LIVE_PIN", "SCHEDULED"]),
   scopeType: z.enum(["TOPIC", "CHAPTER", "SUBJECT"]),
   subjectId: z.string().trim().min(2).max(80),
+  classNum: z.union([z.literal(9), z.literal(10), z.literal(11), z.literal(12)]).optional(),
   stream: z.enum(["ALL", "NA", "Arts", "Science", "Commerce"]).optional(),
   chapterIds: z.array(z.string().trim().min(2).max(100)).max(30).default([]),
   durationMins: z.number().int().min(5).max(180),
@@ -71,12 +75,12 @@ export async function GET(request: Request) {
   // STUDENT VIEW — STRICTLY SANITIZED (NO answers, NO questions_snapshot, NO room_pin)
   // =========================================================================
   if (session.role === "student" && session.student) {
-    const enrolledIds = await getStudentEnrolledSubjectIds(
+    const accessibleIds = await getStudentAccessibleSubjectIds(
       session.principalId,
       session.student.academicYear
     );
 
-    if (enrolledIds.length === 0) {
+    if (accessibleIds.length === 0) {
       return jsonNoStore({ ok: true, exams: [] });
     }
 
@@ -87,7 +91,6 @@ export async function GET(request: Request) {
       )
       .eq("school_udise", session.schoolUdise)
       .eq("class_num", session.student.classNum)
-      .in("subject_id", enrolledIds)
       .in("status", ["LOBBY", "ACTIVE", "ENDED"])
       .order("created_at", { ascending: false })
       .limit(60);
@@ -96,8 +99,16 @@ export async function GET(request: Request) {
       return jsonNoStore({ error: "Unable to load exams." }, { status: 500 });
     }
 
+    const examSubjectIds = Array.from(new Set((rawExams ?? []).map((e) => e.subject_id)));
+    const examAliasMap = await resolveSubjectAliasMap(examSubjectIds);
+    const accessibleSet = new Set(accessibleIds);
+
     const studentStream = session.student.stream;
     const eligibleExams = (rawExams ?? []).filter((e) => {
+      const canonical = examAliasMap.get(e.subject_id) ?? e.subject_id;
+      if (!accessibleSet.has(e.subject_id) && !accessibleSet.has(canonical)) {
+        return false;
+      }
       if (e.stream === "ALL" || e.stream === "NA") return true;
       return e.stream === studentStream;
     });
@@ -384,7 +395,7 @@ export async function POST(request: Request) {
 
   const { data: subject } = await supabase
     .from("subjects")
-    .select("id, class_num, stream")
+    .select("id, class_num, stream, syllabus_alias_of")
     .eq("id", input.subjectId)
     .maybeSingle();
 
@@ -392,20 +403,23 @@ export async function POST(request: Request) {
     return jsonNoStore({ error: "Selected subject was not found." }, { status: 400 });
   }
 
-  // Validate optional chapters belong to subject
+  // Resolve syllabus alias for chapter & question bank lookup (e.g., bseb-12-lang2-eng -> bseb-12-lang1-eng)
+  const contentSubjectId = subject.syllabus_alias_of ?? subject.id;
+
+  // Validate optional chapters belong to canonical subject
   let validChapterIds: string[] = [];
   if (input.chapterIds.length > 0) {
     const { data: chaps } = await supabase
       .from("chapters")
       .select("id")
-      .eq("subject_id", subject.id)
+      .eq("subject_id", contentSubjectId)
       .in("id", input.chapterIds);
     validChapterIds = (chaps ?? []).map((c) => c.id);
   }
 
   // Build snapshot from bank (both PRACTICE & EXAM_ONLY pools!) + custom MCQs
   const built = await buildExamQuestionsSnapshot({
-    subjectId: subject.id,
+    subjectId: contentSubjectId,
     questionIds: input.questionIds,
     customQuestions: input.customQuestions,
   });
@@ -414,8 +428,14 @@ export async function POST(request: Request) {
     return jsonNoStore({ error: built.error }, { status: 400 });
   }
 
+  // For universal skills (class_num === 0), target the chosen classroom grade (9-12)
+  const effectiveClassNum: ClassNum =
+    subject.class_num === 0
+      ? input.classNum ?? session.teacher?.assignedClasses?.[0] ?? 10
+      : (subject.class_num as ClassNum);
+
   const derivedStream: ExamStream =
-    subject.class_num === 9 || subject.class_num === 10
+    effectiveClassNum === 9 || effectiveClassNum === 10
       ? "NA"
       : subject.stream === "ALL"
       ? input.stream ?? "ALL"
@@ -446,7 +466,7 @@ export async function POST(request: Request) {
         title: cleanTitle,
         exam_mode: input.examMode,
         scope_type: input.scopeType,
-        class_num: subject.class_num,
+        class_num: effectiveClassNum,
         stream: derivedStream,
         subject_id: subject.id,
         chapter_ids: validChapterIds,

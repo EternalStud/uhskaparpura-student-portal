@@ -39,7 +39,7 @@ export async function GET(
     await Promise.all([
       supabase
         .from("subjects")
-        .select("id, bseb_code, class_num, stream, category, name_en, name_hi, accent_color")
+        .select("id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order, syllabus_alias_of")
         .eq("id", chapter.subject_id)
         .maybeSingle(),
       supabase

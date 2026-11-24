@@ -1,10 +1,12 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonNoStore, requireRole } from "@/lib/auth";
+import { resolveCanonicalSubjectId } from "@/app/api/student/_helpers";
 
 /**
  * GET /api/teacher/question-bank
  * Teacher-ONLY endpoint exposing BOTH `PRACTICE` and `EXAM_ONLY` MCQ question pools
- * for building Live Classroom & Scheduled Exams. Strictly blocked for students.
+ * for building Live Classroom & Scheduled Exams (including Universal ICT & English
+ * Foundation Labs and resolved `syllabus_alias_of` subjects!). Strictly blocked for students.
  */
 export async function GET(request: Request) {
   const auth = await requireRole(["teacher", "school_admin"], request);
@@ -22,13 +24,14 @@ export async function GET(request: Request) {
   }
 
   const supabase = getSupabaseAdmin();
+  const canonicalSubjectId = await resolveCanonicalSubjectId(subjectId);
 
   let query = supabase
     .from("questions")
     .select(
       "id, subject_id, chapter_id, topic_tag, bank_pool, question_type, difficulty_tier, exam_year_tag, q_hi, q_en, options_json, correct_option, explanation_hi, explanation_en"
     )
-    .eq("subject_id", subjectId)
+    .eq("subject_id", canonicalSubjectId)
     .eq("question_type", "MCQ")
     .eq("is_published", true)
     .order("created_at", { ascending: false })
@@ -53,7 +56,7 @@ export async function GET(request: Request) {
     supabase
       .from("chapters")
       .select("id, chapter_no, title_hi, title_en")
-      .eq("subject_id", subjectId)
+      .eq("subject_id", canonicalSubjectId)
       .eq("is_published", true)
       .order("chapter_no", { ascending: true }),
   ]);
@@ -77,6 +80,7 @@ export async function GET(request: Request) {
 
   return jsonNoStore({
     ok: true,
+    canonicalSubjectId,
     chapters: chapters ?? [],
     questions: filtered.map((q) => {
       const ch = chapterMap.get(q.chapter_id);

@@ -16,6 +16,7 @@ import {
   Printer,
   Sparkles,
   Target,
+  Volume2,
 } from "lucide-react";
 import type {
   ChapterNoteRow,
@@ -23,6 +24,7 @@ import type {
   GlossaryTerm,
   SubjectRow,
 } from "@/types/database";
+import type { FourStageProgressResult } from "@/lib/progress/four-stage";
 import { BiText, useLanguage } from "@/components/providers/LanguageProvider";
 import {
   Badge,
@@ -33,6 +35,7 @@ import {
   useToast,
 } from "@/components/ui";
 import { BilingualDiagramRenderer, MindmapViewer } from "@/components/visual";
+import { FourStageProgressBar } from "./FourStageProgressBar";
 import { cn } from "@/components/ui/cn";
 
 interface NotesApiResponse {
@@ -47,8 +50,11 @@ interface NotesApiResponse {
   progress?: {
     notes_completed: boolean;
     notes_progress_pct: number;
+    play_completed?: boolean;
+    subjective_completed?: boolean;
     mastery_pct: number;
   };
+  fourStage?: FourStageProgressResult;
   practiceCounts?: {
     total: number;
     mcq: number;
@@ -112,6 +118,7 @@ export function VisualNotesReader({ chapterId }: { chapterId: string }) {
       const json = (await res.json()) as {
         ok?: boolean;
         pointsAwarded?: number;
+        fourStage?: FourStageProgressResult;
         error?: string;
       };
       if (!res.ok || !json.ok) {
@@ -122,6 +129,9 @@ export function VisualNotesReader({ chapterId }: { chapterId: string }) {
         return;
       }
       setNotesCompleted(true);
+      if (json.fourStage) {
+        setData((prev) => (prev ? { ...prev, fourStage: json.fourStage } : prev));
+      }
       toast.success(
         t("अध्याय नोट्स पूरे हुए!", "Chapter Notes Completed!"),
         json.pointsAwarded && json.pointsAwarded > 0
@@ -278,6 +288,15 @@ export function VisualNotesReader({ chapterId }: { chapterId: string }) {
         </div>
       </Card>
 
+      {/* 4-Stage Genuine Chapter Progress Bar */}
+      {data.fourStage && (
+        <FourStageProgressBar
+          fourStage={data.fourStage}
+          chapterId={chapter.id}
+          activeStage="understand"
+        />
+      )}
+
       {/* No Published Visual Note Yet — Dignified Fallback */}
       {!note && (
         <Card className="text-center py-10 space-y-3">
@@ -394,9 +413,26 @@ export function VisualNotesReader({ chapterId }: { chapterId: string }) {
 
                       {activeGlossary &&
                         sec.glossary_terms.some((g) => g.term_en === activeGlossary.term_en) && (
-                          <div className="rounded-lg border border-indigo-academic/25 bg-indigo-soft p-3.5 text-sm text-ink space-y-1">
-                            <div className="font-bold text-indigo-ink">
-                              <BiText hi={activeGlossary.term_hi} en={activeGlossary.term_en} inline />
+                          <div className="rounded-lg border border-indigo-academic/25 bg-indigo-soft p-3.5 text-sm text-ink space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-indigo-ink">
+                                  <BiText hi={activeGlossary.term_hi} en={activeGlossary.term_en} inline />
+                                </span>
+                                {activeGlossary.pronunciation_hi && (
+                                  <span className="inline-flex items-center gap-1 rounded-full border border-indigo-academic/25 bg-surface px-2.5 py-0.5 text-xs font-semibold text-ink">
+                                    <Volume2 className="h-3 w-3 text-indigo-ink shrink-0" />
+                                    {t("उच्चारण:", "Say:")} {activeGlossary.pronunciation_hi}
+                                  </span>
+                                )}
+                              </div>
+                              <ReadAloudButton
+                                text={activeGlossary.term_en}
+                                locale="en-IN"
+                                rate={0.86}
+                                size="sm"
+                                label={t("सुनें", "Listen")}
+                              />
                             </div>
                             <div className="text-ink-secondary leading-relaxed">
                               <MathMarkdown

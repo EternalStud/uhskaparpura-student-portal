@@ -6,6 +6,7 @@
 export type LanguageMode = 'HI' | 'EN' | 'BOTH';
 export type UserRole = 'student' | 'teacher' | 'school_admin' | 'super_admin';
 export type ClassNum = 9 | 10 | 11 | 12;
+export type SubjectClassNum = 0 | ClassNum;
 
 export type SchoolStatus = 'ONBOARDING' | 'ACTIVE' | 'SUSPENDED';
 export type StudentStream = 'UNSET' | 'NA' | 'Arts' | 'Science' | 'Commerce';
@@ -42,13 +43,21 @@ export type QuestionType =
   | 'LONG_5M'
   | 'MATCH_PAIRS'
   | 'DIAGRAM_LABEL'
-  | 'FLASHCARD';
+  | 'FLASHCARD'
+  | 'SENTENCE_BUILDER'
+  | 'SHORTCUT_STUDIO'
+  | 'EXCEL_SANDBOX'
+  | 'SCENARIO_LAB';
 export type DifficultyTier = 'FOUNDATION' | 'BOARD' | 'TOPPER';
 
 export type PracticeMode =
   | 'FLASHCARD'
   | 'MATCH_PAIRS'
   | 'DIAGRAM_LABEL'
+  | 'SENTENCE_BUILDER'
+  | 'SHORTCUT_STUDIO'
+  | 'EXCEL_SANDBOX'
+  | 'SCENARIO_LAB'
   | 'MCQ_PRACTICE'
   | 'SUBJECTIVE_SELF_CHECK'
   | 'REVISION_DRILL'
@@ -267,6 +276,7 @@ export type BilingualDiagramSpec =
 export interface GlossaryTerm {
   term_hi: string;
   term_en: string;
+  pronunciation_hi?: string;
   definition_hi: string;
   definition_en: string;
 }
@@ -387,6 +397,78 @@ export interface MemoryCueItem {
   cue_en: string;
 }
 
+export interface FlashcardAsset {
+  kind: 'FLASHCARD';
+  front_hi: string;
+  front_en: string;
+  back_hi: string;
+  back_en: string;
+  pronunciation_hi?: string;
+  mnemonic_hi?: string;
+  mnemonic_en?: string;
+  formula_latex?: string;
+}
+
+export interface SentenceBuilderAsset {
+  kind: 'SENTENCE_BUILDER';
+  prompt_hi: string;
+  prompt_en: string;
+  grammar_formula?: string;
+  tokens: string[];
+  distractors?: string[];
+  correct_sentence: string;
+  pronunciation_hi?: string;
+}
+
+export interface ShortcutStudioAsset {
+  kind: 'SHORTCUT_STUDIO';
+  app_context: 'WINDOWS' | 'MS_WORD' | 'MS_EXCEL';
+  task_hi: string;
+  task_en: string;
+  expected_keys: string[];
+  sample_doc_before: string;
+  preview_effect: string;
+  available_keys: string[];
+}
+
+export interface ExcelSandboxAsset {
+  kind: 'EXCEL_SANDBOX';
+  task_hi: string;
+  task_en: string;
+  columns: string[];
+  rows: Array<Array<string | number>>;
+  target_cell: string;
+  highlight_range: string[];
+  accepted_formulas: string[];
+  expected_value: string;
+  formula_chips: string[];
+}
+
+export type ScenarioLabVariant =
+  | 'RIBBON_DETECTIVE'
+  | 'CYBER_SAFETY'
+  | 'PICTURE_GRAMMAR'
+  | 'EMAIL_COMPOSER'
+  | 'PROMPT_BUILDER'
+  | 'WRITING_TEMPLATE';
+
+export interface ScenarioLabAsset {
+  kind: 'SCENARIO_LAB';
+  variant: ScenarioLabVariant;
+  scene_title_hi: string;
+  scene_title_en: string;
+  prompt_hi: string;
+  prompt_en: string;
+  scene_diagram?: BilingualDiagramSpec | null;
+  choices: Array<{
+    id: string;
+    icon?: string;
+    label_hi: string;
+    label_en: string;
+  }>;
+  correct_choice_id: string;
+}
+
 export type VisualAsset =
   | {
       kind: 'MATCH_PAIRS';
@@ -416,16 +498,11 @@ export type VisualAsset =
         options_en: string[];
       }>;
     }
-  | {
-      kind: 'FLASHCARD';
-      front_hi: string;
-      front_en: string;
-      back_hi: string;
-      back_en: string;
-      mnemonic_hi?: string;
-      mnemonic_en?: string;
-      formula_latex?: string;
-    }
+  | FlashcardAsset
+  | SentenceBuilderAsset
+  | ShortcutStudioAsset
+  | ExcelSandboxAsset
+  | ScenarioLabAsset
   | {
       kind: 'INLINE_DIAGRAM';
       diagram: BilingualDiagramSpec;
@@ -637,7 +714,7 @@ export interface AuditLogRow {
 export interface SubjectRow {
   id: string;
   bseb_code: string;
-  class_num: ClassNum;
+  class_num: SubjectClassNum;
   stream: SubjectStream;
   category: SubjectCategory;
   name_en: string;
@@ -645,6 +722,7 @@ export interface SubjectRow {
   icon_name: string;
   accent_color: string;
   sort_order: number;
+  syllabus_alias_of: string | null;
 }
 
 export interface StudentSubjectRow {
@@ -771,6 +849,8 @@ export interface StudentChapterProgressRow {
   chapter_id: string;
   notes_completed: boolean;
   notes_progress_pct: number;
+  play_completed: boolean;
+  subjective_completed: boolean;
   flashcards_mastered: number;
   practice_attempted: number;
   practice_correct: number;
@@ -982,7 +1062,7 @@ export interface Database {
         AuditLogRow,
         'id' | 'school_udise' | 'actor_id' | 'target_type' | 'target_id' | 'meta_json' | 'created_at'
       >;
-      subjects: TableDef<SubjectRow, 'icon_name' | 'accent_color' | 'sort_order'>;
+      subjects: TableDef<SubjectRow, 'icon_name' | 'accent_color' | 'sort_order' | 'syllabus_alias_of'>;
       student_subjects: TableDef<StudentSubjectRow, 'academic_year' | 'created_at'>;
       chapters: TableDef<
         ChapterRow,
@@ -1014,7 +1094,7 @@ export interface Database {
       >;
       student_chapter_progress: TableDef<
         StudentChapterProgressRow,
-        'notes_completed' | 'notes_progress_pct' | 'flashcards_mastered' | 'practice_attempted' | 'practice_correct' | 'mastery_pct' | 'last_studied_at'
+        'notes_completed' | 'notes_progress_pct' | 'play_completed' | 'subjective_completed' | 'flashcards_mastered' | 'practice_attempted' | 'practice_correct' | 'mastery_pct' | 'last_studied_at'
       >;
       student_question_mastery: TableDef<
         StudentQuestionMasteryRow,

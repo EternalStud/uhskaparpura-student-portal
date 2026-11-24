@@ -8,7 +8,10 @@ import {
   validateCsrf,
 } from "@/lib/auth";
 import { isWithinWindow } from "@/lib/time/ist";
-import { getStudentEnrolledSubjectIds } from "@/app/api/collab/_helpers";
+import {
+  getStudentAccessibleSubjectIds,
+  resolveCanonicalSubjectId,
+} from "@/app/api/student/_helpers";
 import {
   areSolutionsUnlockedForStudent,
   buildQuestionOrderForAttempt,
@@ -114,21 +117,25 @@ export async function POST(request: Request) {
     );
   }
 
-  // Verify Class, Stream, and Enrolled Subject eligibility
-  const enrolledSubjectIds = await getStudentEnrolledSubjectIds(
-    session.principalId,
-    session.student.academicYear
-  );
+  // Verify Class, Stream, and Accessible Subject eligibility (including Universal Labs & Aliases)
+  const [accessibleSubjectIds, examCanonicalSubjectId] = await Promise.all([
+    getStudentAccessibleSubjectIds(session.principalId, session.student.academicYear),
+    resolveCanonicalSubjectId(exam.subject_id),
+  ]);
 
   const streamMatches =
     exam.stream === "ALL" ||
     exam.stream === "NA" ||
     exam.stream === session.student.stream;
 
+  const subjectEligible =
+    accessibleSubjectIds.includes(exam.subject_id) ||
+    accessibleSubjectIds.includes(examCanonicalSubjectId);
+
   if (
     exam.class_num !== session.student.classNum ||
     !streamMatches ||
-    !enrolledSubjectIds.includes(exam.subject_id)
+    !subjectEligible
   ) {
     return jsonNoStore(
       {

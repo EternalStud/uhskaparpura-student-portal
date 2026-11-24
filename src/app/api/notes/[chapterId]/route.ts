@@ -6,8 +6,11 @@ import {
   awardStudentStudyProgress,
   checkActiveLivePinExamLock,
   computeChapterMedal,
-  getStudentEnrolledSubjectIds,
+  computeFourStageProgress,
+  getStudentAccessibleSubjectIds,
+  PLAY_LAB_QUESTION_TYPES,
 } from "@/app/api/student/_helpers";
+import type { QuestionType } from "@/types/database";
 
 const markNotesSchema = z.object({
   notesCompleted: z.boolean().optional().default(true),
@@ -41,14 +44,14 @@ export async function GET(
   }
 
   const supabase = getSupabaseAdmin();
-  const [chapterRes, enrolledIds] = await Promise.all([
+  const [chapterRes, accessibleIds] = await Promise.all([
     supabase
       .from("chapters")
       .select("*")
       .eq("id", chapterId)
       .eq("is_published", true)
       .maybeSingle(),
-    getStudentEnrolledSubjectIds(session.principalId, studentInfo.academicYear),
+    getStudentAccessibleSubjectIds(session.principalId, studentInfo.academicYear),
   ]);
 
   if (chapterRes.error || !chapterRes.data) {
@@ -59,7 +62,7 @@ export async function GET(
   }
 
   const chapter = chapterRes.data;
-  if (enrolledIds.length > 0 && !enrolledIds.includes(chapter.subject_id)) {
+  if (accessibleIds.length > 0 && !accessibleIds.includes(chapter.subject_id)) {
     return jsonNoStore(
       {
         error: "यह अध्याय आपके चुने गए विषयों में शामिल नहीं है।",
@@ -103,12 +106,26 @@ export async function GET(
     total: practiceTypes.length,
     mcq: practiceTypes.filter((q) => q.question_type === "MCQ").length,
     visual: practiceTypes.filter((q) =>
-      ["FLASHCARD", "MATCH_PAIRS", "DIAGRAM_LABEL"].includes(q.question_type)
+      PLAY_LAB_QUESTION_TYPES.has(q.question_type as QuestionType)
     ).length,
     subjective: practiceTypes.filter((q) =>
       ["SHORT_2M", "LONG_5M"].includes(q.question_type)
     ).length,
   };
+
+  const prog = progressRes.data;
+  const quizMasteryPct =
+    prog && prog.practice_attempted > 0
+      ? Math.round((prog.practice_correct / prog.practice_attempted) * 100)
+      : 0;
+  const fourStage = computeFourStageProgress({
+    notesCompleted: Boolean(prog?.notes_completed),
+    notesProgressPct: prog?.notes_progress_pct ?? 0,
+    playCompleted: Boolean(prog?.play_completed),
+    quizMasteryPct,
+    subjectiveCompleted: Boolean(prog?.subjective_completed),
+    hasSubjective: practiceCounts.subjective > 0,
+  });
 
   const siblings = siblingChaptersRes.data ?? [];
   const currentIdx = siblings.findIndex((c) => c.id === chapter.id);
@@ -120,17 +137,20 @@ export async function GET(
     chapter,
     subject: subjectRes.data ?? null,
     note: noteRes.data ?? null,
-    progress: progressRes.data ?? {
+    progress: prog ?? {
       student_id: session.principalId,
       chapter_id: chapter.id,
       notes_completed: false,
       notes_progress_pct: 0,
+      play_completed: false,
+      subjective_completed: false,
       flashcards_mastered: 0,
       practice_attempted: 0,
       practice_correct: 0,
       mastery_pct: 0,
       last_studied_at: null,
     },
+    fourStage,
     practiceCounts,
     navigation: {
       prevChapter,
@@ -179,26 +199,34 @@ export async function POST(
   }
 
   const supabase = getSupabaseAdmin();
-  const [chapterRes, enrolledIds, existingProgRes] = await Promise.all([
+  const [chapterRes, accessibleIds, existingProgRes, subjCountRes] = await Promise.all([
     supabase
       .from("chapters")
       .select("id, subject_id")
       .eq("id", chapterId)
       .eq("is_published", true)
       .maybeSingle(),
-    getStudentEnrolledSubjectIds(session.principalId, studentInfo.academicYear),
+    getStudentAccessibleSubjectIds(session.principalId, studentInfo.academicYear),
     supabase
       .from("student_chapter_progress")
       .select("*")
       .eq("student_id", session.principalId)
       .eq("chapter_id", chapterId)
       .maybeSingle(),
+    supabase
+      .from("questions")
+      .select("id")
+      .eq("chapter_id", chapterId)
+      .eq("bank_pool", "PRACTICE")
+      .eq("is_published", true)
+      .in("question_type", ["SHORT_2M", "LONG_5M"])
+      .limit(1),
   ]);
 
   if (!chapterRes.data) {
     return jsonNoStore({ error: "अध्याय नहीं मिला।", errorEn: "Chapter not found." }, { status: 404 });
   }
-  if (enrolledIds.length > 0 && !enrolledIds.includes(chapterRes.data.subject_id)) {
+  if (accessibleIds.length > 0 && !accessibleIds.includes(chapterRes.data.subject_id)) {
     return jsonNoStore({ error: "अनुमति नहीं है।", errorEn: "Not enrolled in this subject." }, { status: 403 });
   }
 
@@ -211,12 +239,19 @@ export async function POST(
 
   const practiceAttempted = existing?.practice_attempted ?? 0;
   const practiceCorrect = existing?.practice_correct ?? 0;
-  const practiceAccuracyPct =
+  const quizMasteryPct =
     practiceAttempted > 0 ? Math.round((practiceCorrect / practiceAttempted) * 100) : 0;
-  const nextMasteryPct = Math.min(
-    100,
-    Math.round(nextNotesPct * 0.35 + practiceAccuracyPct * 0.65)
-  );
+
+  const fourStage = computeFourStageProgress({
+    notesCompleted: nextCompleted,
+    notesProgressPct: nextNotesPct,
+    playCompleted: Boolean(existing?.play_completed),
+    quizMasteryPct,
+    subjectiveCompleted: Boolean(existing?.subjective_completed),
+    hasSubjective: (subjCountRes.data ?? []).length > 0,
+  });
+
+  const finalMasteryPct = Math.max(existing?.mastery_pct ?? 0, fourStage.totalPct);
 
   await supabase.from("student_chapter_progress").upsert(
     {
@@ -224,10 +259,12 @@ export async function POST(
       chapter_id: chapterId,
       notes_completed: nextCompleted,
       notes_progress_pct: nextNotesPct,
+      play_completed: Boolean(existing?.play_completed),
+      subjective_completed: Boolean(existing?.subjective_completed),
       flashcards_mastered: existing?.flashcards_mastered ?? 0,
       practice_attempted: practiceAttempted,
       practice_correct: practiceCorrect,
-      mastery_pct: Math.max(existing?.mastery_pct ?? 0, nextMasteryPct),
+      mastery_pct: finalMasteryPct,
       last_studied_at: new Date().toISOString(),
     },
     { onConflict: "student_id,chapter_id" }
@@ -247,8 +284,9 @@ export async function POST(
     ok: true,
     notesCompleted: nextCompleted,
     notesProgressPct: nextNotesPct,
-    masteryPct: Math.max(existing?.mastery_pct ?? 0, nextMasteryPct),
-    medal: computeChapterMedal(Math.max(existing?.mastery_pct ?? 0, nextMasteryPct)),
+    masteryPct: finalMasteryPct,
+    fourStage,
+    medal: computeChapterMedal(finalMasteryPct),
     pointsAwarded,
     reward,
   });

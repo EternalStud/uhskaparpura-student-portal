@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getTodayIst } from "@/lib/time/ist";
 import {
   checkActiveLivePinExamLock,
-  getStudentEnrolledSubjectIds,
+  computeFourStageProgress,
+  getStudentAccessibleSubjectIds,
 } from "@/app/api/student/_helpers";
 import type { DifficultyTier, QuestionRow } from "@/types/database";
 
@@ -40,7 +41,7 @@ export async function GET(
   }
 
   const supabase = getSupabaseAdmin();
-  const enrolledIds = await getStudentEnrolledSubjectIds(
+  const accessibleIds = await getStudentAccessibleSubjectIds(
     session.principalId,
     studentInfo.academicYear
   );
@@ -96,7 +97,7 @@ export async function GET(
     );
   }
 
-  if (enrolledIds.length > 0 && !enrolledIds.includes(chapter.subject_id)) {
+  if (accessibleIds.length > 0 && !accessibleIds.includes(chapter.subject_id)) {
     return jsonNoStore(
       {
         error: "यह अध्याय आपके चुने गए विषयों में शामिल नहीं है।",
@@ -182,7 +183,8 @@ export async function GET(
     }
 
     // Authentic BSEB rule: student gets 2N objective options and must attempt strictly at most N (50%)
-    const evenPool = omrPool.length >= 2 && omrPool.length % 2 === 1 ? omrPool.slice(0, -1) : omrPool;
+    const evenPool =
+      omrPool.length >= 2 && omrPool.length % 2 === 1 ? omrPool.slice(0, -1) : omrPool;
     const attemptLimit = Math.max(1, Math.floor(evenPool.length / 2));
 
     return jsonNoStore({
@@ -209,7 +211,11 @@ export async function GET(
     });
   }
 
-  // Default: Complete 6-mode bucketed Practice Hub payload
+  // Default: Complete Interactive Labs + 6-Mode Bucketed Practice Hub payload
+  const sentenceBuilders = enriched.filter((q) => q.question_type === "SENTENCE_BUILDER");
+  const shortcutStudios = enriched.filter((q) => q.question_type === "SHORTCUT_STUDIO");
+  const excelSandboxes = enriched.filter((q) => q.question_type === "EXCEL_SANDBOX");
+  const scenarioLabs = enriched.filter((q) => q.question_type === "SCENARIO_LAB");
   const flashcards = enriched.filter((q) => q.question_type === "FLASHCARD");
   const matchPairs = enriched.filter((q) => q.question_type === "MATCH_PAIRS");
   const diagramLabels = enriched.filter((q) => q.question_type === "DIAGRAM_LABEL");
@@ -219,13 +225,42 @@ export async function GET(
   const pyqQuestions = enriched.filter((q) => Boolean(q.exam_year_tag));
   const revisionQuestions = enriched.filter((q) => q.inRevisionQueue);
 
+  const prog = progressRes.data;
+  const quizMasteryPct =
+    prog && prog.practice_attempted > 0
+      ? Math.round((prog.practice_correct / prog.practice_attempted) * 100)
+      : 0;
+  const hasSubjective = shortAnswers.length + longAnswers.length > 0;
+  const fourStage = computeFourStageProgress({
+    notesCompleted: Boolean(prog?.notes_completed),
+    notesProgressPct: prog?.notes_progress_pct ?? 0,
+    playCompleted: Boolean(prog?.play_completed),
+    quizMasteryPct,
+    subjectiveCompleted: Boolean(prog?.subjective_completed),
+    hasSubjective,
+  });
+
+  const visualPlayTotal =
+    sentenceBuilders.length +
+    shortcutStudios.length +
+    excelSandboxes.length +
+    scenarioLabs.length +
+    flashcards.length +
+    matchPairs.length +
+    diagramLabels.length;
+
   return jsonNoStore({
     mode: "all",
     todayIst,
     chapter,
     subject: subjectRes.data ?? null,
-    progress: progressRes.data ?? null,
+    progress: prog ?? null,
+    fourStage,
     buckets: {
+      sentenceBuilders,
+      shortcutStudios,
+      excelSandboxes,
+      scenarioLabs,
       flashcards,
       matchPairs,
       diagramLabels,
@@ -237,7 +272,14 @@ export async function GET(
     },
     counts: {
       total: enriched.length,
-      visualPlay: flashcards.length + matchPairs.length + diagramLabels.length,
+      visualPlay: visualPlayTotal,
+      sentenceBuilders: sentenceBuilders.length,
+      shortcutStudios: shortcutStudios.length,
+      excelSandboxes: excelSandboxes.length,
+      scenarioLabs: scenarioLabs.length,
+      flashcards: flashcards.length,
+      matchPairs: matchPairs.length,
+      diagramLabels: diagramLabels.length,
       mcqs: mcqs.length,
       subjective: shortAnswers.length + longAnswers.length,
       pyq: pyqQuestions.length,

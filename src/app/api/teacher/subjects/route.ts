@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const { data: subjects, error } = await supabase
     .from("subjects")
     .select(
-      "id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order"
+      "id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order, syllabus_alias_of"
     )
     .order("class_num", { ascending: true })
     .order("sort_order", { ascending: true });
@@ -37,9 +37,10 @@ export async function GET(request: Request) {
     return jsonNoStore({ error: "Unable to load BSEB subject catalog." }, { status: 500 });
   }
 
-  const allSubjects: SubjectRow[] = subjects ?? [];
+  const allSubjects: SubjectRow[] = (subjects ?? []) as SubjectRow[];
 
   const grouped = {
+    universalSkills: allSubjects.filter((s) => s.class_num === 0),
     secondary: {
       class9: allSubjects.filter((s) => s.class_num === 9),
       class10: allSubjects.filter((s) => s.class_num === 10),
@@ -123,10 +124,12 @@ export async function POST(request: Request) {
     );
   }
 
-  // Ensure assignedClasses covers every selected subject's class_num
+  // Ensure assignedClasses covers every selected subject's class_num (ignore universal class_num = 0)
   const mergedClassesSet = new Set<ClassNum>(uniqueClasses);
   for (const classNum of validMap.values()) {
-    mergedClassesSet.add(classNum);
+    if (classNum === 9 || classNum === 10 || classNum === 11 || classNum === 12) {
+      mergedClassesSet.add(classNum);
+    }
   }
   const finalClasses = Array.from(mergedClassesSet).sort((a, b) => a - b);
 

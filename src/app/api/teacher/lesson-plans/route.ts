@@ -1,11 +1,12 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonNoStore, requireRole } from "@/lib/auth";
-import type { ChapterRow, ClassNum, SubjectRow } from "@/types/database";
+import { UNIVERSAL_SKILL_SUBJECT_IDS } from "@/app/api/student/_helpers";
+import type { ChapterRow, SubjectClassNum, SubjectRow } from "@/types/database";
 
 /**
  * GET /api/teacher/lesson-plans
  * STRICTLY Teacher / School Admin / Super Admin ONLY — NEVER accessible to students.
- * Lists BSEB subjects and chapters with official pedagogical lesson plan status.
+ * Lists BSEB subjects AND Universal ICT / English Foundation Labs with official lesson plans.
  */
 export async function GET(request: Request) {
   const auth = await requireRole(["teacher", "school_admin", "super_admin"], request);
@@ -22,29 +23,22 @@ export async function GET(request: Request) {
   let subjectsQuery = supabase
     .from("subjects")
     .select(
-      "id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order"
+      "id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order, syllabus_alias_of"
     )
     .order("class_num", { ascending: true })
     .order("sort_order", { ascending: true });
 
-  if (classNumParam && ["9", "10", "11", "12"].includes(classNumParam)) {
-    subjectsQuery = subjectsQuery.eq("class_num", Number(classNumParam) as ClassNum);
+  if (classNumParam && ["0", "9", "10", "11", "12"].includes(classNumParam)) {
+    subjectsQuery = subjectsQuery.eq("class_num", Number(classNumParam) as SubjectClassNum);
   }
   if (subjectIdParam) {
     subjectsQuery = subjectsQuery.eq("id", subjectIdParam);
   }
   if (scope === "my" && session.teacher) {
     const assigned = session.teacher.assignedSubjectIds;
-    if (assigned.length === 0) {
-      return jsonNoStore({
-        ok: true,
-        scope,
-        assignedSubjectIds: [],
-        subjects: [],
-        totalPlansAvailable: 0,
-      });
-    }
-    subjectsQuery = subjectsQuery.in("id", assigned);
+    // Always surface Universal ICT & English Foundation Labs for every teacher alongside their assigned BSEB subjects
+    const myIds = Array.from(new Set([...UNIVERSAL_SKILL_SUBJECT_IDS, ...assigned]));
+    subjectsQuery = subjectsQuery.in("id", myIds);
   }
 
   const { data: subjects, error: subjErr } = await subjectsQuery;
@@ -52,7 +46,7 @@ export async function GET(request: Request) {
     return jsonNoStore({ error: "Unable to load subjects for lesson plans." }, { status: 500 });
   }
 
-  const subjectRows: SubjectRow[] = subjects ?? [];
+  const subjectRows: SubjectRow[] = (subjects ?? []) as SubjectRow[];
   if (subjectRows.length === 0) {
     return jsonNoStore({
       ok: true,
@@ -63,7 +57,11 @@ export async function GET(request: Request) {
     });
   }
 
-  const subjectIds = subjectRows.map((s) => s.id);
+  // Include canonical alias targets when loading chapters so aliased English/ICT subjects
+  // seamlessly expose their full chapter list & teacher lesson plans
+  const contentSubjectIds = Array.from(
+    new Set(subjectRows.map((s) => s.syllabus_alias_of ?? s.id))
+  );
 
   const [{ data: chapters, error: chErr }, { data: planMeta, error: lpErr }] =
     await Promise.all([
@@ -72,7 +70,7 @@ export async function GET(request: Request) {
         .select(
           "id, subject_id, chapter_no, title_en, title_hi, summary_en, summary_hi, bseb_weightage_marks, estimated_mins, is_published"
         )
-        .in("subject_id", subjectIds)
+        .in("subject_id", contentSubjectIds)
         .eq("is_published", true)
         .order("chapter_no", { ascending: true }),
       supabase
@@ -104,12 +102,14 @@ export async function GET(request: Request) {
     chaptersBySubject.set(ch.subject_id, list);
   }
 
-  let totalPlansAvailable = 0;
+  const uniqueReadyChapterIds = new Set<string>();
+  const assignedSet = new Set(session.teacher?.assignedSubjectIds ?? []);
 
   const enrichedSubjects = subjectRows.map((subj) => {
-    const subjChapters = (chaptersBySubject.get(subj.id) ?? []).map((ch) => {
+    const contentId = subj.syllabus_alias_of ?? subj.id;
+    const subjChapters = (chaptersBySubject.get(contentId) ?? []).map((ch) => {
       const lp = planByChapter.get(ch.id) ?? null;
-      if (lp) totalPlansAvailable += 1;
+      if (lp) uniqueReadyChapterIds.add(ch.id);
       return {
         ...ch,
         hasLessonPlan: Boolean(lp),
@@ -117,9 +117,12 @@ export async function GET(request: Request) {
       };
     });
 
+    const isUniversal = (UNIVERSAL_SKILL_SUBJECT_IDS as readonly string[]).includes(subj.id);
+
     return {
       ...subj,
-      isAssigned: session.teacher?.assignedSubjectIds.includes(subj.id) ?? false,
+      isAssigned: assignedSet.has(subj.id) || isUniversal,
+      isUniversal,
       lessonPlansCount: subjChapters.filter((c) => c.hasLessonPlan).length,
       chapters: subjChapters,
     };
@@ -130,6 +133,6 @@ export async function GET(request: Request) {
     scope,
     assignedSubjectIds: session.teacher?.assignedSubjectIds ?? [],
     subjects: enrichedSubjects,
-    totalPlansAvailable,
+    totalPlansAvailable: uniqueReadyChapterIds.size,
   });
 }

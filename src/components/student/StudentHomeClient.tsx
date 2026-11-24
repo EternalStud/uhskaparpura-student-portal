@@ -5,21 +5,45 @@ import Link from "next/link";
 import {
   ArrowRight,
   Award,
+  BookCheck,
   BookOpen,
   CheckCircle2,
   ClipboardCheck,
   Clock,
   Flame,
+  Layers,
   Lock,
   Medal,
   RefreshCw,
   Sparkles,
+  Target,
+  TrendingUp,
   Trophy,
 } from "lucide-react";
+import type { FourStageProgressResult } from "@/lib/progress/four-stage";
 import { BiText, useLanguage } from "@/components/providers/LanguageProvider";
 import { Badge, Button, Card } from "@/components/ui";
+import { FourStageProgressBar } from "./FourStageProgressBar";
 import { SubjectIcon } from "./SubjectIcon";
 import { cn } from "@/components/ui/cn";
+
+interface SubjectSummaryItem {
+  id: string;
+  bseb_code: string;
+  class_num: number;
+  name_hi: string;
+  name_en: string;
+  icon_name: string;
+  accent_color: string;
+  slot_type: string;
+  totalChapters: number;
+  richNotesCount: number;
+  completedChapters: number;
+  playLabsCompleted?: number;
+  totalInteractiveLabs?: number;
+  avgMasteryPct: number;
+  medals: { gold: number; silver: number; bronze: number };
+}
 
 interface DashboardResponse {
   student: {
@@ -46,6 +70,13 @@ interface DashboardResponse {
     todayPoints: number;
     completed: boolean;
   };
+  concreteStats?: {
+    chaptersMastered: number;
+    playLabsCompleted: number;
+    wordsAndConceptsLearned: number;
+    questionsMastered: number;
+    notesCompletedCount: number;
+  };
   continueChapter: {
     chapterId: string;
     chapterNo: number;
@@ -56,23 +87,14 @@ interface DashboardResponse {
     subjectNameEn: string;
     masteryPct: number;
     notesCompleted: boolean;
+    playCompleted?: boolean;
+    subjectiveCompleted?: boolean;
+    fourStage?: FourStageProgressResult;
     hasRichNotes: boolean;
     estimatedMins: number;
   } | null;
-  subjects: Array<{
-    id: string;
-    bseb_code: string;
-    name_hi: string;
-    name_en: string;
-    icon_name: string;
-    accent_color: string;
-    slot_type: string;
-    totalChapters: number;
-    richNotesCount: number;
-    completedChapters: number;
-    avgMasteryPct: number;
-    medals: { gold: number; silver: number; bronze: number };
-  }>;
+  universalSkills?: SubjectSummaryItem[];
+  subjects: SubjectSummaryItem[];
   revision: {
     totalCount: number;
     dueCount: number;
@@ -109,7 +131,12 @@ export function StudentHomeClient() {
         if (active) setData(json);
       } catch {
         if (active) {
-          setError(t("डैशबोर्ड लोड नहीं हो सका। कृपया पुनः प्रयास करें।", "Could not load your dashboard. Please retry."));
+          setError(
+            t(
+              "डैशबोर्ड लोड नहीं हो सका। कृपया पुनः प्रयास करें।",
+              "Could not load your dashboard. Please retry."
+            )
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -125,10 +152,9 @@ export function StudentHomeClient() {
     return (
       <div className="space-y-5 animate-pulse">
         <div className="h-36 rounded-paper bg-surface-subtle" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="h-28 rounded-paper bg-surface-subtle" />
-          <div className="h-28 rounded-paper bg-surface-subtle" />
-          <div className="h-28 rounded-paper bg-surface-subtle" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="h-36 rounded-paper bg-surface-subtle" />
+          <div className="h-36 rounded-paper bg-surface-subtle" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="h-44 rounded-paper bg-surface-subtle" />
@@ -150,7 +176,18 @@ export function StudentHomeClient() {
     );
   }
 
-  const { student, dailyGoal, continueChapter, subjects, revision, activeExamsCount, liveExamLock, weeklySpotlight } = data;
+  const {
+    student,
+    dailyGoal,
+    concreteStats,
+    continueChapter,
+    universalSkills = [],
+    subjects,
+    revision,
+    activeExamsCount,
+    liveExamLock,
+    weeklySpotlight,
+  } = data;
 
   return (
     <div className="space-y-6">
@@ -163,10 +200,17 @@ export function StudentHomeClient() {
             </span>
             <div>
               <div className="font-bold text-sm sm:text-base text-ink">
-                {t("आपकी लाइव कक्षा परीक्षा अभी चल रही है", "Your Live Classroom Exam Is Currently Active")}
+                {t(
+                  "आपकी लाइव कक्षा परीक्षा अभी चल रही है",
+                  "Your Live Classroom Exam Is Currently Active"
+                )}
               </div>
               <p className="text-xs sm:text-sm text-ink-secondary">
-                {liveExamLock.examTitle ?? t("परीक्षा पूरी करने के लिए वापस जाएँ।", "Return to complete and submit your exam.")}
+                {liveExamLock.examTitle ??
+                  t(
+                    "परीक्षा पूरी करने के लिए वापस जाएँ।",
+                    "Return to complete and submit your exam."
+                  )}
               </p>
             </div>
           </div>
@@ -240,16 +284,121 @@ export function StudentHomeClient() {
         </Card>
       </div>
 
+      {/* Calm Concrete Progress Strip: "मेरी वास्तविक प्रगति (My Genuine Growth)" */}
+      {concreteStats && (
+        <Card padding="sm" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-soft text-emerald-ink">
+                <TrendingUp className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-ink">
+                  <BiText hi="मेरी वास्तविक प्रगति" en="My Genuine Growth" inline />
+                </h2>
+                <p className="text-xs text-ink-muted">
+                  {t(
+                    "हर पूरा किया गया अध्याय, लैब और सीखा गया प्रश्न आपकी असली कमाई है",
+                    "Every mastered chapter, interactive lab, and solved skill counts"
+                  )}
+                </p>
+              </div>
+            </div>
+            {(student.totalMedals.gold > 0 ||
+              student.totalMedals.silver > 0 ||
+              student.totalMedals.bronze > 0) && (
+              <div className="flex items-center gap-2 text-xs font-bold">
+                <span className="inline-flex items-center gap-1 text-amber-ink">
+                  <Medal className="h-3.5 w-3.5" /> {student.totalMedals.gold}
+                </span>
+                <span className="inline-flex items-center gap-1 text-indigo-ink">
+                  <Medal className="h-3.5 w-3.5" /> {student.totalMedals.silver}
+                </span>
+                <span className="inline-flex items-center gap-1 text-emerald-ink">
+                  <Medal className="h-3.5 w-3.5" /> {student.totalMedals.bronze}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="rounded-lg border border-hairline bg-canvas px-3 py-2.5 flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-soft text-indigo-ink shrink-0">
+                <BookCheck className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold text-ink leading-tight">
+                  {concreteStats.chaptersMastered}
+                </div>
+                <div className="text-[11px] text-ink-secondary truncate">
+                  {t("तैयार अध्याय", "Chapters Mastered")}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-hairline bg-canvas px-3 py-2.5 flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-emerald-soft text-emerald-ink shrink-0">
+                <Layers className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold text-ink leading-tight">
+                  {concreteStats.playLabsCompleted}
+                </div>
+                <div className="text-[11px] text-ink-secondary truncate">
+                  {t("खेल लैब पूर्ण", "Play Labs Done")}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-hairline bg-canvas px-3 py-2.5 flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-amber-soft text-amber-ink shrink-0">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold text-ink leading-tight">
+                  {concreteStats.wordsAndConceptsLearned}
+                </div>
+                <div className="text-[11px] text-ink-secondary truncate">
+                  {t("सीखे शब्द व नियम", "Words & Concepts")}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-hairline bg-canvas px-3 py-2.5 flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-indigo-soft text-indigo-ink shrink-0">
+                <Target className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-lg font-extrabold text-ink leading-tight">
+                  {concreteStats.questionsMastered}
+                </div>
+                <div className="text-[11px] text-ink-secondary truncate">
+                  {t("सही हल प्रश्न", "Questions Mastered")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Continue Where You Left Off Hero Card */}
       {continueChapter && (
-        <Card variant="indigo" padding="lg" className="flex flex-col md:flex-row md:items-center justify-between gap-5">
-          <div className="space-y-2 max-w-2xl">
+        <Card
+          variant="indigo"
+          padding="lg"
+          className="flex flex-col md:flex-row md:items-center justify-between gap-5"
+        >
+          <div className="space-y-2.5 max-w-2xl flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="indigo" icon={<BookOpen className="h-3.5 w-3.5" />}>
                 {t("जहाँ छोड़ा था, वहाँ से जारी रखें", "Continue Where You Left Off")}
               </Badge>
               <Badge variant="neutral">
-                <BiText hi={continueChapter.subjectNameHi} en={continueChapter.subjectNameEn} inline />
+                <BiText
+                  hi={continueChapter.subjectNameHi}
+                  en={continueChapter.subjectNameEn}
+                  inline
+                />
               </Badge>
               <Badge variant="amber" icon={<Clock className="h-3 w-3" />}>
                 {t(`${continueChapter.estimatedMins} मिनट`, `${continueChapter.estimatedMins} min`)}
@@ -259,17 +408,23 @@ export function StudentHomeClient() {
               {t(`अध्याय ${continueChapter.chapterNo}: `, `Ch ${continueChapter.chapterNo}: `)}
               <BiText hi={continueChapter.titleHi} en={continueChapter.titleEn} inline />
             </h2>
-            <div className="flex items-center gap-3 pt-1">
-              <div className="flex-1 max-w-xs h-2 rounded-full bg-surface overflow-hidden border border-indigo-academic/15">
-                <div
-                  className="h-full bg-emerald-mastery rounded-full"
-                  style={{ width: `${continueChapter.masteryPct}%` }}
-                />
+            {continueChapter.fourStage ? (
+              <div className="max-w-lg pt-0.5">
+                <FourStageProgressBar fourStage={continueChapter.fourStage} compact />
               </div>
-              <span className="text-xs font-bold text-indigo-ink">
-                {continueChapter.masteryPct}% {t("तैयारी", "Mastery")}
-              </span>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3 pt-1">
+                <div className="flex-1 max-w-xs h-2 rounded-full bg-surface overflow-hidden border border-indigo-academic/15">
+                  <div
+                    className="h-full bg-emerald-mastery rounded-full"
+                    style={{ width: `${continueChapter.masteryPct}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-indigo-ink">
+                  {continueChapter.masteryPct}% {t("तैयारी", "Mastery")}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
@@ -280,11 +435,116 @@ export function StudentHomeClient() {
             </Link>
             <Link href={`/student/chapter/${continueChapter.chapterId}/practice`}>
               <Button variant="secondary" size="lg" rightIcon={<ArrowRight className="h-4 w-4" />}>
-                {t("अभ्यास करें", "Practice")}
+                {t("खेल व अभ्यास", "Play & Practice")}
               </Button>
             </Link>
           </div>
         </Card>
+      )}
+
+      {/* Featured Universal Skill & Foundation Labs (Available to ALL Classes 9-12 on Day 1!) */}
+      {universalSkills.length > 0 && (
+        <section className="space-y-3.5">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="emerald" icon={<Sparkles className="h-3 w-3" />}>
+                  {t("कक्षा 9–12 सभी के लिए मुफ़्त व अनिवार्य कौशल", "Open to All Classes 9–12")}
+                </Badge>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-ink">
+                <BiText
+                  hi="प्रमुख कौशल एवं नींव लैब (खेल-खेल में सीखें)"
+                  en="Featured Skill & Foundation Labs (Learn by Playing)"
+                />
+              </h2>
+              <p className="text-xs sm:text-sm text-ink-secondary">
+                {t(
+                  "कंप्यूटर शॉर्टकट, Excel सैंडबॉक्स, और शून्य से अंग्रेज़ी वाक्य निर्माण — बिना डर के रोज़ अभ्यास करें।",
+                  "Master real computer shortcuts, Excel formulas, and fear-free English grammar through tactile play labs."
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {universalSkills.map((lab) => {
+              const isIct = lab.id === "skill-ict-lab";
+              return (
+                <Link key={lab.id} href={`/student/subject/${lab.id}`} className="group block">
+                  <Card
+                    variant="interactive"
+                    padding="lg"
+                    className="h-full flex flex-col justify-between gap-4 border-indigo-academic/25"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <span
+                          className="inline-flex h-12 w-12 items-center justify-center rounded-paper text-white shrink-0 shadow-paper"
+                          style={{ backgroundColor: lab.accent_color }}
+                        >
+                          <SubjectIcon name={lab.icon_name} className="h-6 w-6" />
+                        </span>
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
+                          <Badge variant="emerald">
+                            {t(`${lab.totalChapters} अध्याय`, `${lab.totalChapters} Units`)}
+                          </Badge>
+                          {(lab.totalInteractiveLabs ?? 0) > 0 && (
+                            <Badge variant="amber">
+                              {t(
+                                `${lab.totalInteractiveLabs} खेल लैब`,
+                                `${lab.totalInteractiveLabs} Play Labs`
+                              )}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-bold text-ink group-hover:text-indigo-ink transition-colors leading-snug">
+                          <BiText hi={lab.name_hi} en={lab.name_en} />
+                        </h3>
+                        <p className="text-xs sm:text-sm text-ink-secondary mt-1 leading-relaxed">
+                          {isIct
+                            ? t(
+                                "कीबोर्ड शॉर्टकट स्टूडियो, लाइव MS Excel सैंडबॉक्स, Word टूलबार पहचान और साइबर सुरक्षा अभ्यास।",
+                                "Interactive Shortcut Studio, live MS Excel Sandbox, Word Ribbon Detective, and Cyber Safety missions."
+                              )
+                            : t(
+                                "हिंदी से अंग्रेज़ी वाक्य निर्माण लैब, उच्चारण सहायता, टेंस टाइमलाइन और 20-अंक बोर्ड लेखन।",
+                                "Hindi-to-English Sentence Builder, pronunciation audio guides, visual Tenses, and 20-mark writing templates."
+                              )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5 pt-3 border-t border-hairline">
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span className="text-ink-secondary">
+                          {t(
+                            `${lab.completedChapters}/${lab.totalChapters} अध्याय तैयार`,
+                            `${lab.completedChapters}/${lab.totalChapters} units mastered`
+                          )}
+                        </span>
+                        <span className="text-indigo-ink">{lab.avgMasteryPct}%</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-surface-subtle overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-emerald-mastery transition-all"
+                          style={{ width: `${lab.avgMasteryPct}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between pt-0.5 text-xs font-bold text-indigo-ink">
+                        <span>{t("लैब में प्रवेश करें", "Open Interactive Lab")}</span>
+                        <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Quick Action Strip: Revision Queue + Active Exams */}
@@ -358,17 +618,17 @@ export function StudentHomeClient() {
         </Card>
       </div>
 
-      {/* My Subjects Visual Journey Grid */}
+      {/* My BSEB Subjects Visual Journey Grid */}
       <section className="space-y-3.5">
         <div className="flex items-center justify-between gap-2">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-ink">
-              <BiText hi="मेरे विषय (अध्याय यात्रा)" en="My Subjects (Chapter Journey)" />
+              <BiText hi="मेरे बिहार बोर्ड विषय (अध्याय यात्रा)" en="My BSEB Subjects (Chapter Journey)" />
             </h2>
             <p className="text-xs sm:text-sm text-ink-secondary">
               {t(
-                "किसी भी विषय पर टैप करें और सरल विज़ुअल नोट्स व अभ्यास शुरू करें।",
-                "Tap any subject to open its structured chapter path, visual notes, and 6-mode practice."
+                "किसी भी विषय पर टैप करें और सरल विज़ुअल नोट्स व खेल-अभ्यास शुरू करें।",
+                "Tap any subject to open its 4-stage chapter path, visual notes, and interactive practice."
               )}
             </p>
           </div>
@@ -409,7 +669,7 @@ export function StudentHomeClient() {
                     <p className="text-xs text-ink-secondary mt-1">
                       {t(
                         `${sub.totalChapters} अध्याय · ${sub.completedChapters} पूर्ण`,
-                        `${sub.totalChapters} chapters · ${sub.completedChapters} completed`
+                        `${sub.totalChapters} chapters · ${sub.completedChapters} mastered`
                       )}
                     </p>
                   </div>

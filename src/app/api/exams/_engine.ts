@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { sanitizeMarkdownSource, sanitizePlainText } from "@/lib/sanitize/content";
+import { resolveCanonicalSubjectId } from "@/app/api/student/_helpers";
 import type {
   DifficultyTier,
   ExamAttemptRow,
@@ -378,13 +379,15 @@ export async function buildExamQuestionsSnapshot(params: {
   const validBankIds: string[] = [];
 
   if (uniqueBankIds.length > 0) {
+    const canonicalSubjectId = await resolveCanonicalSubjectId(params.subjectId);
+    const allowedSubjectIds = Array.from(new Set([params.subjectId, canonicalSubjectId]));
     const { data: rows, error } = await supabase
       .from("questions")
       .select(
         "id, subject_id, question_type, difficulty_tier, exam_year_tag, q_hi, q_en, options_json, correct_option, explanation_hi, explanation_en, visual_asset_json, is_published"
       )
       .in("id", uniqueBankIds)
-      .eq("subject_id", params.subjectId)
+      .in("subject_id", allowedSubjectIds)
       .eq("question_type", "MCQ")
       .eq("is_published", true);
 

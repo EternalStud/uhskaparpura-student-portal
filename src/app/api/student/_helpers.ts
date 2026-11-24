@@ -1,6 +1,48 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { diffIstDays, getIstWeekStart, getTodayIst } from "@/lib/time/ist";
-import type { StudentBadge } from "@/types/database";
+import {
+  computeChapterMedal,
+  computeFourStageProgress,
+  type ChapterMedal,
+  type FourStageItem,
+  type FourStageProgressInput,
+  type FourStageProgressResult,
+} from "@/lib/progress/four-stage";
+import type { QuestionType, StudentBadge } from "@/types/database";
+
+export {
+  computeChapterMedal,
+  computeFourStageProgress,
+  type ChapterMedal,
+  type FourStageItem,
+  type FourStageProgressInput,
+  type FourStageProgressResult,
+};
+
+/**
+ * Canonical universal skill & foundation tracks automatically unlocked for EVERY
+ * Bihar government school student across Classes 9, 10, 11, and 12.
+ */
+export const UNIVERSAL_SKILL_SUBJECT_IDS = [
+  "skill-ict-lab",
+  "skill-eng-foundation",
+] as const;
+
+export type UniversalSkillSubjectId = (typeof UNIVERSAL_SKILL_SUBJECT_IDS)[number];
+
+export const PLAY_LAB_QUESTION_TYPES: ReadonlySet<QuestionType> = new Set<QuestionType>([
+  "FLASHCARD",
+  "MATCH_PAIRS",
+  "DIAGRAM_LABEL",
+  "SENTENCE_BUILDER",
+  "SHORTCUT_STUDIO",
+  "EXCEL_SANDBOX",
+  "SCENARIO_LAB",
+]);
+
+export function isUniversalSkillSubject(subjectId: string): boolean {
+  return (UNIVERSAL_SKILL_SUBJECT_IDS as readonly string[]).includes(subjectId);
+}
 
 export interface LiveExamLockState {
   locked: boolean;
@@ -49,7 +91,51 @@ export async function checkActiveLivePinExamLock(
   };
 }
 
-export async function getStudentEnrolledSubjectIds(
+/**
+ * Resolves a single subject ID through `subjects.syllabus_alias_of` to its canonical
+ * syllabus subject ID (e.g. `bseb-12-lang2-eng` -> `bseb-12-lang1-eng`,
+ * `bseb-10-skill-ict` -> `skill-ict-lab`).
+ */
+export async function resolveCanonicalSubjectId(subjectId: string): Promise<string> {
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from("subjects")
+    .select("id, syllabus_alias_of")
+    .eq("id", subjectId)
+    .maybeSingle();
+
+  return data?.syllabus_alias_of ?? subjectId;
+}
+
+/**
+ * Batch resolves a list of subject IDs to a map of `subjectId -> canonicalSubjectId`.
+ */
+export async function resolveSubjectAliasMap(
+  subjectIds: string[]
+): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(subjectIds.filter(Boolean)));
+  const map = new Map<string, string>();
+  if (unique.length === 0) return map;
+
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from("subjects")
+    .select("id, syllabus_alias_of")
+    .in("id", unique);
+
+  for (const id of unique) {
+    map.set(id, id);
+  }
+  for (const row of data ?? []) {
+    map.set(row.id, row.syllabus_alias_of ?? row.id);
+  }
+  return map;
+}
+
+/**
+ * Returns strictly the raw subject IDs saved in `student_subjects`.
+ */
+export async function getStudentRawEnrolledSubjectIds(
   studentId: string,
   academicYear: string
 ): Promise<string[]> {
@@ -61,6 +147,42 @@ export async function getStudentEnrolledSubjectIds(
     .eq("academic_year", academicYear);
 
   return (data ?? []).map((row) => row.subject_id);
+}
+
+/**
+ * Returns ALL subject IDs accessible to a Class 9-12 student:
+ * - Their enrolled BSEB subjects
+ * - Resolved `syllabus_alias_of` canonical subjects (e.g. `bseb-12-lang2-eng` -> `bseb-12-lang1-eng`)
+ * - Universal skill & foundation labs (`skill-ict-lab`, `skill-eng-foundation`)
+ */
+export async function getStudentAccessibleSubjectIds(
+  studentId: string,
+  academicYear: string
+): Promise<string[]> {
+  const rawIds = await getStudentRawEnrolledSubjectIds(studentId, academicYear);
+  const accessible = new Set<string>(UNIVERSAL_SKILL_SUBJECT_IDS);
+
+  if (rawIds.length > 0) {
+    const aliasMap = await resolveSubjectAliasMap(rawIds);
+    for (const id of rawIds) {
+      accessible.add(id);
+      const canonical = aliasMap.get(id);
+      if (canonical) accessible.add(canonical);
+    }
+  }
+
+  return Array.from(accessible);
+}
+
+/**
+ * Backwards-compatible alias for `getStudentAccessibleSubjectIds` so every student
+ * route automatically unlocks Universal Skill Labs & `syllabus_alias_of` targets.
+ */
+export async function getStudentEnrolledSubjectIds(
+  studentId: string,
+  academicYear: string
+): Promise<string[]> {
+  return getStudentAccessibleSubjectIds(studentId, academicYear);
 }
 
 export interface ScholarlyRank {
@@ -115,15 +237,6 @@ export function getScholarlyRank(masteryPoints: number): ScholarlyRank {
     minPoints: 0,
     nextPoints: 100,
   };
-}
-
-export type ChapterMedal = "GOLD" | "SILVER" | "BRONZE" | "NONE";
-
-export function computeChapterMedal(masteryPct: number): ChapterMedal {
-  if (masteryPct >= 85) return "GOLD";
-  if (masteryPct >= 60) return "SILVER";
-  if (masteryPct >= 30) return "BRONZE";
-  return "NONE";
 }
 
 /**

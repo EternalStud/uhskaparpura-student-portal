@@ -7,7 +7,10 @@ import {
   validateCsrf,
 } from "@/lib/auth";
 import { sanitizePlainText } from "@/lib/sanitize/content";
-import { getStudentEnrolledSubjectIds } from "@/app/api/collab/_helpers";
+import {
+  getStudentAccessibleSubjectIds,
+  resolveCanonicalSubjectId,
+} from "@/app/api/student/_helpers";
 import {
   areSolutionsUnlockedForStudent,
   buildExamQuestionsSnapshot,
@@ -73,19 +76,22 @@ export async function GET(
     if (exam.status === "DRAFT") {
       return jsonNoStore({ error: "Exam is not available." }, { status: 404 });
     }
-    const enrolled = await getStudentEnrolledSubjectIds(
-      session.principalId,
-      session.student.academicYear
-    );
+    const [accessible, examCanonical] = await Promise.all([
+      getStudentAccessibleSubjectIds(session.principalId, session.student.academicYear),
+      resolveCanonicalSubjectId(exam.subject_id),
+    ]);
     const streamOk =
       exam.stream === "ALL" ||
       exam.stream === "NA" ||
       exam.stream === session.student.stream;
 
+    const subjectOk =
+      accessible.includes(exam.subject_id) || accessible.includes(examCanonical);
+
     if (
       exam.class_num !== session.student.classNum ||
       !streamOk ||
-      !enrolled.includes(exam.subject_id)
+      !subjectOk
     ) {
       return jsonNoStore({ error: "You are not enrolled in this exam's class/subject." }, { status: 403 });
     }

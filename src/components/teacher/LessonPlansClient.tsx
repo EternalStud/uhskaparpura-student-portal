@@ -141,7 +141,8 @@ export function LessonPlansClient() {
             value={classNum}
             onChange={(e) => setClassNum(e.target.value)}
             options={[
-              { value: "", label: t("सभी कक्षाएँ (9–12)", "All Classes (9–12)") },
+              { value: "", label: t("सभी कक्षाएँ (9–12 व कौशल लैब)", "All Classes (9–12 & Skill Labs)") },
+              { value: "0", label: t("कौशल एवं नींव लैब (9–12)", "Skill & Foundation Labs (9–12)") },
               { value: "9", label: t("कक्षा 9", "Class 9") },
               { value: "10", label: t("कक्षा 10", "Class 10") },
               { value: "11", label: t("कक्षा 11", "Class 11") },
@@ -193,8 +194,10 @@ export function LessonPlansClient() {
               <CardHeader className="flex-row items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="indigo">
-                      {t(`कक्षा ${subj.class_num}`, `Class ${subj.class_num}`)}
+                    <Badge variant={subj.class_num === 0 ? "emerald" : "indigo"}>
+                      {subj.class_num === 0
+                        ? t("कक्षा 9–12 · कौशल लैब", "Classes 9–12 · Skill Lab")
+                        : t(`कक्षा ${subj.class_num}`, `Class ${subj.class_num}`)}
                     </Badge>
                     {subj.stream !== "NA" && subj.stream !== "ALL" && (
                       <Badge variant="neutral">{subj.stream}</Badge>

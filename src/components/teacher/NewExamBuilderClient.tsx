@@ -105,6 +105,7 @@ export function NewExamBuilderClient() {
   const [examMode, setExamMode] = useState<ExamMode>("LIVE_PIN");
   const [scopeType, setScopeType] = useState<ExamScopeType>("CHAPTER");
   const [subjectId, setSubjectId] = useState("");
+  const [targetClassNum, setTargetClassNum] = useState<9 | 10 | 11 | 12>(10);
   const [selectedChapterIds, setSelectedChapterIds] = useState<string[]>([]);
   const [durationMins, setDurationMins] = useState(20);
   const [startsLocal, setStartsLocal] = useState("");
@@ -321,6 +322,7 @@ export function NewExamBuilderClient() {
           examMode,
           scopeType,
           subjectId,
+          classNum: currentSubject?.class_num === 0 ? targetClassNum : undefined,
           chapterIds: selectedChapterIds,
           durationMins: Number(durationMins),
           startsAt: startsAtIso,
@@ -482,13 +484,47 @@ export function NewExamBuilderClient() {
               }}
               options={subjects.map((s) => ({
                 value: s.id,
-                label: `${t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)} · ${t(
+                label: `${
+                  s.class_num === 0
+                    ? t("कौशल लैब (9–12)", "Skill Lab (9–12)")
+                    : t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)
+                } · ${t(
                   s.name_hi,
                   s.name_en
                 )}${s.isAssigned ? ` (${t("मेरा विषय", "My Subject")})` : ""}`,
               }))}
             />
           </div>
+
+          {currentSubject?.class_num === 0 && (
+            <div className="rounded-lg border border-indigo-academic/25 bg-indigo-soft p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-xs sm:text-sm text-ink">
+                <strong className="text-indigo-ink block">
+                  {t("लक्ष्य कक्षा चुनें (कौशल लैब परीक्षा)", "Select Target Class (Skill Lab Exam)")}
+                </strong>
+                <span className="text-ink-secondary">
+                  {t(
+                    "चुनें कि यह ICT या English Foundation परीक्षा किस कक्षा के विद्यार्थियों के लिए आयोजित की जा रही है।",
+                    "Choose which grade (Class 9–12) will take this ICT or English Foundation exam."
+                  )}
+                </span>
+              </div>
+              <div className="w-full sm:w-44 shrink-0">
+                <Select
+                  value={String(targetClassNum)}
+                  onChange={(e) =>
+                    setTargetClassNum(Number(e.target.value) as 9 | 10 | 11 | 12)
+                  }
+                  options={[
+                    { value: "9", label: t("कक्षा 9", "Class 9") },
+                    { value: "10", label: t("कक्षा 10", "Class 10") },
+                    { value: "11", label: t("कक्षा 11", "Class 11") },
+                    { value: "12", label: t("कक्षा 12", "Class 12") },
+                  ]}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Select

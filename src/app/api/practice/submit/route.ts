@@ -7,8 +7,11 @@ import {
   awardStudentStudyProgress,
   checkActiveLivePinExamLock,
   computeChapterMedal,
-  getStudentEnrolledSubjectIds,
+  computeFourStageProgress,
+  getStudentAccessibleSubjectIds,
+  PLAY_LAB_QUESTION_TYPES,
 } from "@/app/api/student/_helpers";
+import { validateExcelSubmission } from "@/lib/labs/excel-evaluator";
 import type { PracticeMode, QuestionRow } from "@/types/database";
 
 const submitPracticeSchema = z.object({
@@ -18,6 +21,10 @@ const submitPracticeSchema = z.object({
     "FLASHCARD",
     "MATCH_PAIRS",
     "DIAGRAM_LABEL",
+    "SENTENCE_BUILDER",
+    "SHORTCUT_STUDIO",
+    "EXCEL_SANDBOX",
+    "SCENARIO_LAB",
     "MCQ_PRACTICE",
     "SUBJECTIVE_SELF_CHECK",
     "REVISION_DRILL",
@@ -30,6 +37,10 @@ const submitPracticeSchema = z.object({
         questionId: z.string().uuid(),
         selectedOption: z.enum(["A", "B", "C", "D"]).optional(),
         isCorrect: z.boolean().optional(),
+        submittedSentence: z.string().max(400).optional(),
+        submittedKeys: z.array(z.string().max(32)).max(6).optional(),
+        submittedFormula: z.string().max(200).optional(),
+        selectedChoiceId: z.string().max(80).optional(),
       })
     )
     .max(100)
@@ -55,6 +66,30 @@ function addDaysIst(isoDate: string, days: number): string {
   const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(dt.getUTCDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
+}
+
+function normalizeSentence(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .replace(/[.!?]+$/g, "")
+    .toLowerCase();
+}
+
+function normalizeShortcutKey(raw: string): string {
+  const clean = raw.trim().toLowerCase();
+  if (clean === "control" || clean === "ctrl" || clean === "meta" || clean === "cmd") {
+    return "ctrl";
+  }
+  if (clean === "alt" || clean === "option") return "alt";
+  if (clean === "shift") return "shift";
+  if (clean === "escape" || clean === "esc") return "esc";
+  if (clean === "delete" || clean === "del") return "del";
+  if (clean === "enter" || clean === "return") return "enter";
+  if (clean === " " || clean === "space" || clean === "spacebar") return "space";
+  if (clean === "win" || clean === "windows") return "win";
+  return clean;
 }
 
 export async function POST(request: Request) {
@@ -128,22 +163,22 @@ export async function POST(request: Request) {
     });
   }
 
-  // 2. Verify chapter & enrollment
-  const [chapterRes, enrolledIds] = await Promise.all([
+  // 2. Verify chapter & accessible subjects (enrolled + aliases + universal skill labs)
+  const [chapterRes, accessibleIds] = await Promise.all([
     supabase
       .from("chapters")
       .select("id, subject_id")
       .eq("id", chapterId)
       .eq("is_published", true)
       .maybeSingle(),
-    getStudentEnrolledSubjectIds(session.principalId, studentInfo.academicYear),
+    getStudentAccessibleSubjectIds(session.principalId, studentInfo.academicYear),
   ]);
 
   if (!chapterRes.data) {
     return jsonNoStore({ error: "अध्याय नहीं मिला।", errorEn: "Chapter not found." }, { status: 404 });
   }
   const chapter = chapterRes.data;
-  if (enrolledIds.length > 0 && !enrolledIds.includes(chapter.subject_id)) {
+  if (accessibleIds.length > 0 && !accessibleIds.includes(chapter.subject_id)) {
     return jsonNoStore({ error: "अनुमति नहीं है।", errorEn: "Not enrolled in this subject." }, { status: 403 });
   }
 
@@ -159,29 +194,54 @@ export async function POST(request: Request) {
     .eq("bank_pool", "PRACTICE")
     .eq("is_published", true);
 
+  const accessibleSet = new Set(accessibleIds);
   const questionById = new Map<string, QuestionRow>(
-    ((questionRows ?? []) as QuestionRow[]).map((q) => [q.id, q])
+    ((questionRows ?? []) as QuestionRow[])
+      .filter((q) => {
+        if (accessibleSet.size > 0 && !accessibleSet.has(q.subject_id)) {
+          return false;
+        }
+        if (mode === "REVISION_DRILL") {
+          return true;
+        }
+        // Allow same-subject MCQ padding used by the BSEB 50% OMR Simulator;
+        // enforce strict chapter match for all non-MCQ items
+        if (q.question_type === "MCQ") {
+          return q.chapter_id === chapter.id || q.subject_id === chapter.subject_id;
+        }
+        return q.chapter_id === chapter.id;
+      })
+      .map((q) => [q.id, q])
   );
 
-  // Load existing mastery & revision rows for these questions
-  const [existingMasteryRes, existingRevisionRes, existingChapterProgRes] = await Promise.all([
-    supabase
-      .from("student_question_mastery")
-      .select("*")
-      .eq("student_id", session.principalId)
-      .in("question_id", allQuestionIds),
-    supabase
-      .from("student_revision_queue")
-      .select("*")
-      .eq("student_id", session.principalId)
-      .in("question_id", allQuestionIds),
-    supabase
-      .from("student_chapter_progress")
-      .select("*")
-      .eq("student_id", session.principalId)
-      .eq("chapter_id", chapter.id)
-      .maybeSingle(),
-  ]);
+  // Load existing mastery, revision rows, chapter progress & chapter subjective existence
+  const [existingMasteryRes, existingRevisionRes, existingChapterProgRes, chapterSubjCheckRes] =
+    await Promise.all([
+      supabase
+        .from("student_question_mastery")
+        .select("*")
+        .eq("student_id", session.principalId)
+        .in("question_id", allQuestionIds),
+      supabase
+        .from("student_revision_queue")
+        .select("*")
+        .eq("student_id", session.principalId)
+        .in("question_id", allQuestionIds),
+      supabase
+        .from("student_chapter_progress")
+        .select("*")
+        .eq("student_id", session.principalId)
+        .eq("chapter_id", chapter.id)
+        .maybeSingle(),
+      supabase
+        .from("questions")
+        .select("id")
+        .eq("chapter_id", chapter.id)
+        .eq("bank_pool", "PRACTICE")
+        .eq("is_published", true)
+        .in("question_type", ["SHORT_2M", "LONG_5M"])
+        .limit(1),
+    ]);
 
   const masteryMap = new Map((existingMasteryRes.data ?? []).map((m) => [m.question_id, m]));
   const revisionMap = new Map((existingRevisionRes.data ?? []).map((r) => [r.question_id, r]));
@@ -191,7 +251,12 @@ export async function POST(request: Request) {
 
   let totalEvaluated = 0;
   let correctCount = 0;
+  let mcqAttemptedDelta = 0;
+  let mcqCorrectDelta = 0;
   let flashcardsMasteredDelta = 0;
+  let solvedAnyPlayLab = false;
+  let solvedAnySubjective = false;
+
   const gradedResults: Array<{
     questionId: string;
     questionType: string;
@@ -223,14 +288,66 @@ export async function POST(request: Request) {
     resolved: boolean;
   }> = [];
 
-  // 4. Server-side grading for objective & interactive responses
+  // 4. Server-side grading for objective & all 7 interactive Play-Lab responses
   for (const resp of responses) {
     const q = questionById.get(resp.questionId);
     if (!q) continue;
 
     let isCorrect = false;
+    const asset = q.visual_asset_json;
+
     if (q.question_type === "MCQ") {
       isCorrect = Boolean(resp.selectedOption && q.correct_option === resp.selectedOption);
+      mcqAttemptedDelta += 1;
+      if (isCorrect) mcqCorrectDelta += 1;
+    } else if (q.question_type === "SENTENCE_BUILDER") {
+      isCorrect =
+        typeof resp.submittedSentence === "string" &&
+        asset !== null &&
+        asset.kind === "SENTENCE_BUILDER" &&
+        normalizeSentence(resp.submittedSentence) ===
+          normalizeSentence(asset.correct_sentence);
+    } else if (q.question_type === "SHORTCUT_STUDIO") {
+      if (
+        Array.isArray(resp.submittedKeys) &&
+        asset !== null &&
+        asset.kind === "SHORTCUT_STUDIO"
+      ) {
+        const expectedSet = new Set(asset.expected_keys.map(normalizeShortcutKey));
+        const submittedSet = new Set(resp.submittedKeys.map(normalizeShortcutKey));
+        isCorrect =
+          expectedSet.size > 0 &&
+          expectedSet.size === submittedSet.size &&
+          Array.from(expectedSet).every((k) => submittedSet.has(k));
+      } else {
+        isCorrect = false;
+      }
+    } else if (q.question_type === "EXCEL_SANDBOX") {
+      if (
+        typeof resp.submittedFormula === "string" &&
+        asset !== null &&
+        asset.kind === "EXCEL_SANDBOX"
+      ) {
+        const checked = validateExcelSubmission({
+          submittedFormula: resp.submittedFormula,
+          acceptedFormulas: asset.accepted_formulas,
+          expectedValue: asset.expected_value,
+          spec: {
+            columns: asset.columns,
+            rows: asset.rows,
+            target_cell: asset.target_cell,
+          },
+        });
+        isCorrect = checked.isCorrect;
+      } else {
+        isCorrect = false;
+      }
+    } else if (q.question_type === "SCENARIO_LAB") {
+      isCorrect =
+        typeof resp.selectedChoiceId === "string" &&
+        asset !== null &&
+        asset.kind === "SCENARIO_LAB" &&
+        resp.selectedChoiceId === asset.correct_choice_id;
     } else if (
       q.question_type === "FLASHCARD" ||
       q.question_type === "MATCH_PAIRS" ||
@@ -242,6 +359,10 @@ export async function POST(request: Request) {
       }
     } else {
       continue;
+    }
+
+    if (PLAY_LAB_QUESTION_TYPES.has(q.question_type) && isCorrect) {
+      solvedAnyPlayLab = true;
     }
 
     totalEvaluated += 1;
@@ -263,8 +384,8 @@ export async function POST(request: Request) {
     const prevR = revisionMap.get(q.id);
     let resolvedFromRevision = false;
 
-    if (!isCorrect) {
-      // Queue or reset in spaced-repetition Mistake Vault
+    if (!isCorrect && q.question_type === "MCQ") {
+      // Queue or reset missed MCQs in spaced-repetition Mistake Vault
       revisionUpserts.push({
         student_id: session.principalId,
         question_id: q.id,
@@ -275,7 +396,7 @@ export async function POST(request: Request) {
         next_review_ist: addDaysIst(todayIst, 1),
         resolved: false,
       });
-    } else if (prevR && !prevR.resolved) {
+    } else if (isCorrect && prevR && !prevR.resolved) {
       // 2 consecutive correct answers resolves item out of Revision Queue!
       const shouldResolve = nextStreak >= 2;
       resolvedFromRevision = shouldResolve;
@@ -309,6 +430,8 @@ export async function POST(request: Request) {
     if (!q || (q.question_type !== "SHORT_2M" && q.question_type !== "LONG_5M")) continue;
 
     const confident = check.status === "CONFIDENT";
+    if (confident) solvedAnySubjective = true;
+
     totalEvaluated += 1;
     if (confident) correctCount += 1;
 
@@ -385,7 +508,6 @@ export async function POST(request: Request) {
   });
 
   if (sessionInsertErr) {
-    // PostgreSQL unique violation (23505) on concurrent double-click
     if (sessionInsertErr.code === "23505") {
       return jsonNoStore({
         ok: true,
@@ -403,7 +525,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // 7. Persist mastery, revision queue, chapter progress, and student points/streak
+  // 7. Persist mastery, revision queue, 4-stage chapter progress, and student points/streak
   const writes: Array<PromiseLike<unknown>> = [];
   if (masteryUpserts.length > 0) {
     writes.push(
@@ -421,15 +543,29 @@ export async function POST(request: Request) {
   }
 
   const prevProg = existingChapterProgRes.data;
-  const nextAttempted = (prevProg?.practice_attempted ?? 0) + totalEvaluated;
-  const nextCorrect = (prevProg?.practice_correct ?? 0) + correctCount;
+  // Strictly track Guided Quiz (MCQ) attempts/correctness for Stage 3 mastery
+  // so completing a Flashcard, Play Lab, or Subjective self-check never falsely completes Stage 3
+  const nextAttempted = (prevProg?.practice_attempted ?? 0) + mcqAttemptedDelta;
+  const nextCorrect = (prevProg?.practice_correct ?? 0) + mcqCorrectDelta;
   const nextFlashcards = (prevProg?.flashcards_mastered ?? 0) + flashcardsMasteredDelta;
+  const nextPlayCompleted = Boolean(prevProg?.play_completed) || solvedAnyPlayLab;
+  const nextSubjectiveCompleted =
+    Boolean(prevProg?.subjective_completed) || solvedAnySubjective;
   const notesPct = prevProg?.notes_completed ? 100 : prevProg?.notes_progress_pct ?? 0;
-  const practiceAccuracy = nextAttempted > 0 ? Math.round((nextCorrect / nextAttempted) * 100) : 0;
-  const nextMasteryPct = Math.min(
-    100,
-    Math.round(notesPct * 0.35 + practiceAccuracy * 0.65)
-  );
+  const quizMasteryPct =
+    nextAttempted > 0 ? Math.round((nextCorrect / nextAttempted) * 100) : 0;
+
+  const hasSubjective = (chapterSubjCheckRes.data ?? []).length > 0;
+  const fourStage = computeFourStageProgress({
+    notesCompleted: Boolean(prevProg?.notes_completed),
+    notesProgressPct: notesPct,
+    playCompleted: nextPlayCompleted,
+    quizMasteryPct,
+    subjectiveCompleted: nextSubjectiveCompleted,
+    hasSubjective,
+  });
+
+  const finalMasteryPct = Math.max(prevProg?.mastery_pct ?? 0, fourStage.totalPct);
 
   writes.push(
     supabase.from("student_chapter_progress").upsert(
@@ -438,10 +574,12 @@ export async function POST(request: Request) {
         chapter_id: chapter.id,
         notes_completed: prevProg?.notes_completed ?? false,
         notes_progress_pct: notesPct,
+        play_completed: nextPlayCompleted,
+        subjective_completed: nextSubjectiveCompleted,
         flashcards_mastered: nextFlashcards,
         practice_attempted: nextAttempted,
         practice_correct: nextCorrect,
-        mastery_pct: Math.max(prevProg?.mastery_pct ?? 0, nextMasteryPct),
+        mastery_pct: finalMasteryPct,
         last_studied_at: nowIso,
       },
       { onConflict: "student_id,chapter_id" }
@@ -455,8 +593,6 @@ export async function POST(request: Request) {
     pointsDelta: pointsAwarded,
   });
 
-  const finalMasteryPct = Math.max(prevProg?.mastery_pct ?? 0, nextMasteryPct);
-
   return jsonNoStore({
     ok: true,
     duplicate: false,
@@ -465,7 +601,10 @@ export async function POST(request: Request) {
     correctCount,
     accuracyPct: Math.round((correctCount / totalEvaluated) * 100),
     pointsAwarded,
+    playCompleted: nextPlayCompleted,
+    subjectiveCompleted: nextSubjectiveCompleted,
     chapterMasteryPct: finalMasteryPct,
+    fourStage,
     chapterMedal: computeChapterMedal(finalMasteryPct),
     reward,
     results: gradedResults,

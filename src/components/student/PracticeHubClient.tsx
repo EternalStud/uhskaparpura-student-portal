@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowRight,
   Award,
   BookOpen,
   CheckCircle2,
@@ -11,22 +13,28 @@ import {
   Flame,
   HelpCircle,
   History,
+  Keyboard,
   Layers,
   Lightbulb,
   Lock,
   PenTool,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Sparkles,
+  Table2,
   Target,
+  Volume2,
   XCircle,
 } from "lucide-react";
 import type {
   ChapterRow,
   DifficultyTier,
+  PracticeMode,
   QuestionRow,
   SubjectRow,
 } from "@/types/database";
+import type { FourStageProgressResult } from "@/lib/progress/four-stage";
 import { BiText, useLanguage } from "@/components/providers/LanguageProvider";
 import {
   Badge,
@@ -40,6 +48,13 @@ import {
   BilingualDiagramRenderer,
   type InteractiveDiagramHotspot,
 } from "@/components/visual";
+import { FourStageProgressBar } from "./FourStageProgressBar";
+import {
+  ExcelSandboxLab,
+  ScenarioLab,
+  SentenceBuilderLab,
+  ShortcutStudioLab,
+} from "./labs";
 import { cn } from "@/components/ui/cn";
 
 type EnrichedQuestion = QuestionRow & {
@@ -59,7 +74,12 @@ interface PracticeApiResponse {
   errorEn?: string;
   chapter?: ChapterRow;
   subject?: SubjectRow | null;
+  fourStage?: FourStageProgressResult;
   buckets?: {
+    sentenceBuilders?: EnrichedQuestion[];
+    shortcutStudios?: EnrichedQuestion[];
+    excelSandboxes?: EnrichedQuestion[];
+    scenarioLabs?: EnrichedQuestion[];
     flashcards: EnrichedQuestion[];
     matchPairs: EnrichedQuestion[];
     diagramLabels: EnrichedQuestion[];
@@ -72,12 +92,29 @@ interface PracticeApiResponse {
   counts?: {
     total: number;
     visualPlay: number;
+    sentenceBuilders?: number;
+    shortcutStudios?: number;
+    excelSandboxes?: number;
+    scenarioLabs?: number;
+    flashcards?: number;
+    matchPairs?: number;
+    diagramLabels?: number;
     mcqs: number;
     subjective: number;
     pyq: number;
     revision: number;
   };
 }
+
+type PlaySubMode =
+  | "ALL"
+  | "SENTENCE_BUILDER"
+  | "SHORTCUT_STUDIO"
+  | "EXCEL_SANDBOX"
+  | "SCENARIO_LAB"
+  | "FLASHCARD"
+  | "MATCH_PAIRS"
+  | "DIAGRAM_LABEL";
 
 interface OmrApiResponse {
   locked?: boolean;
@@ -109,6 +146,7 @@ export function PracticeHubClient({
   chapterId: string;
   initialTab?: string;
 }) {
+  const router = useRouter();
   const { lang, t } = useLanguage();
   const toast = useToast();
 
@@ -123,8 +161,11 @@ export function PracticeHubClient({
       : "visual";
 
   const [tab, setTab] = useState<PracticeTab>(resolvedInitialTab);
+  const [playSubMode, setPlaySubMode] = useState<PlaySubMode>("ALL");
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PracticeApiResponse | null>(null);
+  const tierDefaultedRef = useRef(false);
+  const celebratedBoardUnlockRef = useRef(false);
 
   // Visual Play state
   const [flippedCards, setFlippedCards] = useState<Record<string, boolean>>({});
@@ -174,6 +215,15 @@ export function PracticeHubClient({
       });
       const json = (await res.json()) as PracticeApiResponse;
       setData(json);
+      if (!tierDefaultedRef.current && json.buckets?.mcqs) {
+        tierDefaultedRef.current = true;
+        const hasFoundation = json.buckets.mcqs.some(
+          (q) => q.difficulty_tier === "FOUNDATION"
+        );
+        if (hasFoundation) {
+          setTierFilter("FOUNDATION");
+        }
+      }
     } catch {
       setData({
         error: "अभ्यास प्रश्न लोड नहीं हो सके।",
@@ -209,14 +259,16 @@ export function PracticeHubClient({
   }, [tab, omrData, omrLoading, chapterId]);
 
   const submitSinglePractice = async (payload: {
-    mode:
-      | "FLASHCARD"
-      | "MATCH_PAIRS"
-      | "DIAGRAM_LABEL"
-      | "MCQ_PRACTICE"
-      | "SUBJECTIVE_SELF_CHECK"
-      | "REVISION_DRILL";
-    responses?: Array<{ questionId: string; selectedOption?: "A" | "B" | "C" | "D"; isCorrect?: boolean }>;
+    mode: PracticeMode;
+    responses?: Array<{
+      questionId: string;
+      selectedOption?: "A" | "B" | "C" | "D";
+      isCorrect?: boolean;
+      submittedSentence?: string;
+      submittedKeys?: string[];
+      submittedFormula?: string;
+      selectedChoiceId?: string;
+    }>;
     selfChecks?: Array<{ questionId: string; status: "CONFIDENT" | "NEEDS_REVIEW" }>;
   }) => {
     const res = await fetch("/api/practice/submit", {
@@ -230,10 +282,11 @@ export function PracticeHubClient({
         selfChecks: payload.selfChecks ?? [],
       }),
     });
-    return (await res.json()) as {
+    const json = (await res.json()) as {
       ok?: boolean;
       pointsAwarded?: number;
       correctCount?: number;
+      fourStage?: FourStageProgressResult;
       results?: Array<{
         questionId: string;
         isCorrect: boolean;
@@ -242,6 +295,10 @@ export function PracticeHubClient({
       }>;
       error?: string;
     };
+    if (json.ok && json.fourStage) {
+      setData((prev) => (prev ? { ...prev, fourStage: json.fourStage } : prev));
+    }
+    return json;
   };
 
   const handleMcqChoose = async (
@@ -383,6 +440,49 @@ export function PracticeHubClient({
     return list.filter((q) => q.difficulty_tier === tierFilter);
   }, [data, tierFilter]);
 
+  const foundationStats = useMemo(() => {
+    const allMcqs = data?.buckets?.mcqs ?? [];
+    const foundList = allMcqs.filter((q) => q.difficulty_tier === "FOUNDATION");
+    const total = foundList.length;
+    if (total === 0) {
+      return { total: 0, attempted: 0, correct: 0, pct: 100, boardUnlocked: true };
+    }
+    let attempted = 0;
+    let correct = 0;
+    for (const q of foundList) {
+      const local = mcqGraded[q.id];
+      if (local) {
+        attempted += 1;
+        if (local.isCorrect) correct += 1;
+      } else if (q.mastery && q.mastery.attempts_count > 0) {
+        attempted += 1;
+        if (q.mastery.correct_count > 0) correct += 1;
+      }
+    }
+    const pct = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
+    const minNeeded = Math.min(2, total);
+    const boardUnlocked = attempted >= minNeeded && pct >= 60;
+    return { total, attempted, correct, pct, boardUnlocked };
+  }, [data, mcqGraded]);
+
+  useEffect(() => {
+    if (
+      foundationStats.total > 0 &&
+      foundationStats.boardUnlocked &&
+      Object.keys(mcqGraded).length > 0 &&
+      !celebratedBoardUnlockRef.current
+    ) {
+      celebratedBoardUnlockRef.current = true;
+      toast.success(
+        t("बधाई हो! बोर्ड एवं टॉपर स्तर अनलॉक हुआ!", "Unlocked! Board & Topper Tiers Ready!"),
+        t(
+          "आपने बुनियादी स्तर पर 60%+ सटीकता हासिल कर ली — अब बोर्ड परीक्षा के प्रश्न आज़माएँ!",
+          "You scored 60%+ on Foundation — you're ready to conquer Board & Topper questions!"
+        )
+      );
+    }
+  }, [foundationStats, mcqGraded, t, toast]);
+
   const filteredSubjectives = useMemo(() => {
     if (!data?.buckets) return [];
     const shortList = data.buckets.shortAnswers ?? [];
@@ -444,6 +544,96 @@ export function PracticeHubClient({
   }
 
   const { chapter, subject, buckets, counts } = data;
+  const sentenceBuilders = buckets.sentenceBuilders ?? [];
+  const shortcutStudios = buckets.shortcutStudios ?? [];
+  const excelSandboxes = buckets.excelSandboxes ?? [];
+  const scenarioLabs = buckets.scenarioLabs ?? [];
+
+  const playSubOptions: Array<{
+    id: PlaySubMode;
+    hi: string;
+    en: string;
+    count: number;
+    icon: React.ReactNode;
+  }> = [
+    ...(sentenceBuilders.length > 0
+      ? [
+          {
+            id: "SENTENCE_BUILDER" as const,
+            hi: "वाक्य निर्माण",
+            en: "Sentence Builder",
+            count: sentenceBuilders.length,
+            icon: <Sparkles className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(shortcutStudios.length > 0
+      ? [
+          {
+            id: "SHORTCUT_STUDIO" as const,
+            hi: "शॉर्टकट स्टूडियो",
+            en: "Shortcut Studio",
+            count: shortcutStudios.length,
+            icon: <Keyboard className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(excelSandboxes.length > 0
+      ? [
+          {
+            id: "EXCEL_SANDBOX" as const,
+            hi: "एक्सेल सैंडबॉक्स",
+            en: "Excel Sandbox",
+            count: excelSandboxes.length,
+            icon: <Table2 className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(scenarioLabs.length > 0
+      ? [
+          {
+            id: "SCENARIO_LAB" as const,
+            hi: "परिस्थिति लैब",
+            en: "Scenario Lab",
+            count: scenarioLabs.length,
+            icon: <ShieldCheck className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(buckets.flashcards.length > 0
+      ? [
+          {
+            id: "FLASHCARD" as const,
+            hi: "फ्लैशकार्ड",
+            en: "Flashcards",
+            count: buckets.flashcards.length,
+            icon: <Layers className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(buckets.matchPairs.length > 0
+      ? [
+          {
+            id: "MATCH_PAIRS" as const,
+            hi: "जोड़ी मिलाएँ",
+            en: "Match Pairs",
+            count: buckets.matchPairs.length,
+            icon: <Target className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+    ...(buckets.diagramLabels.length > 0
+      ? [
+          {
+            id: "DIAGRAM_LABEL" as const,
+            hi: "चित्र नामांकन",
+            en: "Diagram Label",
+            count: buckets.diagramLabels.length,
+            icon: <BookOpen className="h-3.5 w-3.5" />,
+          },
+        ]
+      : []),
+  ];
 
   const tabs: Array<{
     id: PracticeTab;
@@ -452,7 +642,7 @@ export function PracticeHubClient({
     icon: React.ReactNode;
     count?: number;
   }> = [
-    { id: "visual", hi: "विज़ुअल लैब", en: "Visual Play", icon: <Layers className="h-4 w-4" />, count: counts?.visualPlay },
+    { id: "visual", hi: "खेल-खेल में सीखें", en: "Play & Learn", icon: <Layers className="h-4 w-4" />, count: counts?.visualPlay },
     { id: "mcq", hi: "ऑब्जेक्टिव सीढ़ी", en: "3-Tier MCQ", icon: <Target className="h-4 w-4" />, count: counts?.mcqs },
     { id: "subjective", hi: "2M / 5M उत्तर कोच", en: "2M & 5M Coach", icon: <PenTool className="h-4 w-4" />, count: counts?.subjective },
     { id: "pyq", hi: "विगत वर्ष (PYQ)", en: "BSEB PYQs", icon: <History className="h-4 w-4" />, count: counts?.pyq },
@@ -663,12 +853,38 @@ export function PracticeHubClient({
       {/* Chapter Title */}
       <div className="space-y-1">
         <Badge variant="indigo">
-          {t(`अध्याय ${chapter.chapter_no} · 6-मोड वन-स्टॉप अभ्यास`, `Ch ${chapter.chapter_no} · 6-Mode One-Stop Practice`)}
+          {t(`अध्याय ${chapter.chapter_no} · खेल-खेल लैब एवं 6-मोड अभ्यास`, `Ch ${chapter.chapter_no} · Interactive Labs & 6-Mode Practice`)}
         </Badge>
         <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">
           <BiText hi={chapter.title_hi} en={chapter.title_en} />
         </h1>
       </div>
+
+      {/* 4-Stage Genuine Chapter Progress Bar */}
+      {data.fourStage && (
+        <FourStageProgressBar
+          fourStage={data.fourStage}
+          chapterId={chapter.id}
+          activeStage={
+            tab === "visual"
+              ? "play"
+              : tab === "subjective"
+              ? "mastery"
+              : "quiz"
+          }
+          onStageClick={(stageKey) => {
+            if (stageKey === "understand") {
+              router.push(`/student/chapter/${chapter.id}/notes`);
+            } else if (stageKey === "play") {
+              setTab("visual");
+            } else if (stageKey === "quiz") {
+              setTab("mcq");
+            } else if (stageKey === "mastery") {
+              setTab("subjective");
+            }
+          }}
+        />
+      )}
 
       {/* 6-Mode Navigation Pills */}
       <div
@@ -709,11 +925,219 @@ export function PracticeHubClient({
         })}
       </div>
 
-      {/* ==================== TAB 1: VISUAL PLAY LAB ==================== */}
+      {/* ==================== TAB 1: PLAY & LEARN INTERACTIVE LABS ==================== */}
       {tab === "visual" && (
         <div className="space-y-6">
-          {/* 1A. 3D Flip Flashcards */}
-          {buckets.flashcards.length > 0 && (
+          {/* Sub-mode filter pills when multiple lab types exist */}
+          {playSubOptions.length >= 2 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPlaySubMode("ALL")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-bold transition-all min-h-[38px]",
+                  playSubMode === "ALL"
+                    ? "bg-indigo-academic text-white border-indigo-academic"
+                    : "bg-surface text-ink-secondary border-hairline hover:bg-surface-subtle hover:text-ink"
+                )}
+              >
+                <span>{t("सभी खेल लैब", "All Play Labs")}</span>
+                <span className="opacity-80">({counts?.visualPlay ?? 0})</span>
+              </button>
+              {playSubOptions.map((opt) => {
+                const active = playSubMode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setPlaySubMode(opt.id)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-bold transition-all min-h-[38px]",
+                      active
+                        ? "bg-indigo-academic text-white border-indigo-academic"
+                        : "bg-surface text-ink-secondary border-hairline hover:bg-surface-subtle hover:text-ink"
+                    )}
+                  >
+                    {opt.icon}
+                    <span>{t(opt.hi, opt.en)}</span>
+                    <span className="opacity-80">({opt.count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Lab 1: Sentence Builder Lab */}
+          {(playSubMode === "ALL" || playSubMode === "SENTENCE_BUILDER") &&
+            sentenceBuilders.length > 0 && (
+              <section className="space-y-4">
+                <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-indigo-ink" />
+                  {t("वाक्य निर्माण लैब (खेल-खेल में अंग्रेज़ी वाक्य बनाएँ)", "Sentence Builder Lab (Tap Tiles to Build English)")}
+                </h2>
+                {sentenceBuilders.map((q, idx) => {
+                  const asset = q.visual_asset_json;
+                  if (!asset || asset.kind !== "SENTENCE_BUILDER") return null;
+                  return (
+                    <SentenceBuilderLab
+                      key={q.id}
+                      question={q}
+                      asset={asset}
+                      index={idx}
+                      initiallyMastered={Boolean(q.mastery && q.mastery.correct_count > 0)}
+                      onComplete={async (resPayload) => {
+                        const res = await submitSinglePractice({
+                          mode: "SENTENCE_BUILDER",
+                          responses: [
+                            {
+                              questionId: resPayload.questionId,
+                              submittedSentence: resPayload.submittedSentence,
+                              isCorrect: resPayload.isCorrect,
+                            },
+                          ],
+                        });
+                        if (res.ok) {
+                          toast.success(
+                            t("वाक्य बिल्कुल सही बना!", "Sentence Built Perfectly!"),
+                            t(`+${res.pointsAwarded ?? 10} अध्ययन अंक`, `+${res.pointsAwarded ?? 10} mastery pts`)
+                          );
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </section>
+            )}
+
+          {/* Lab 2: Shortcut Studio Lab */}
+          {(playSubMode === "ALL" || playSubMode === "SHORTCUT_STUDIO") &&
+            shortcutStudios.length > 0 && (
+              <section className="space-y-4">
+                <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <Keyboard className="h-5 w-5 text-indigo-ink" />
+                  {t("शॉर्टकट स्टूडियो (PC कीबोर्ड या टच से शॉर्टकट आज़माएँ)", "Shortcut Studio (Practice Real Keyboard Shortcuts)")}
+                </h2>
+                {shortcutStudios.map((q, idx) => {
+                  const asset = q.visual_asset_json;
+                  if (!asset || asset.kind !== "SHORTCUT_STUDIO") return null;
+                  return (
+                    <ShortcutStudioLab
+                      key={q.id}
+                      question={q}
+                      asset={asset}
+                      index={idx}
+                      initiallyMastered={Boolean(q.mastery && q.mastery.correct_count > 0)}
+                      onComplete={async (resPayload) => {
+                        const res = await submitSinglePractice({
+                          mode: "SHORTCUT_STUDIO",
+                          responses: [
+                            {
+                              questionId: resPayload.questionId,
+                              submittedKeys: resPayload.submittedKeys,
+                              isCorrect: resPayload.isCorrect,
+                            },
+                          ],
+                        });
+                        if (res.ok) {
+                          toast.success(
+                            t("शॉर्टकट सफल रहा!", "Shortcut Mastered!"),
+                            t(`+${res.pointsAwarded ?? 10} अध्ययन अंक`, `+${res.pointsAwarded ?? 10} mastery pts`)
+                          );
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </section>
+            )}
+
+          {/* Lab 3: Excel Sandbox Lab */}
+          {(playSubMode === "ALL" || playSubMode === "EXCEL_SANDBOX") &&
+            excelSandboxes.length > 0 && (
+              <section className="space-y-4">
+                <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <Table2 className="h-5 w-5 text-emerald-ink" />
+                  {t("एक्सेल सैंडबॉक्स (लाइव फॉर्मूला लिखकर उत्तर देखें)", "Excel Formula Sandbox (Run Real Formulas Live)")}
+                </h2>
+                {excelSandboxes.map((q, idx) => {
+                  const asset = q.visual_asset_json;
+                  if (!asset || asset.kind !== "EXCEL_SANDBOX") return null;
+                  return (
+                    <ExcelSandboxLab
+                      key={q.id}
+                      question={q}
+                      asset={asset}
+                      index={idx}
+                      initiallyMastered={Boolean(q.mastery && q.mastery.correct_count > 0)}
+                      onComplete={async (resPayload) => {
+                        const res = await submitSinglePractice({
+                          mode: "EXCEL_SANDBOX",
+                          responses: [
+                            {
+                              questionId: resPayload.questionId,
+                              submittedFormula: resPayload.submittedFormula,
+                              isCorrect: resPayload.isCorrect,
+                            },
+                          ],
+                        });
+                        if (res.ok) {
+                          toast.success(
+                            t("एक्सेल फॉर्मूला सटीक चला!", "Excel Formula Solved!"),
+                            t(`+${res.pointsAwarded ?? 10} अध्ययन अंक`, `+${res.pointsAwarded ?? 10} mastery pts`)
+                          );
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </section>
+            )}
+
+          {/* Lab 4: Scenario Decision Lab */}
+          {(playSubMode === "ALL" || playSubMode === "SCENARIO_LAB") &&
+            scenarioLabs.length > 0 && (
+              <section className="space-y-4">
+                <h2 className="text-lg font-bold text-ink flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-indigo-ink" />
+                  {t("व्यावहारिक परिस्थिति लैब (सही विकल्प चुनें)", "Interactive Scenario Lab")}
+                </h2>
+                {scenarioLabs.map((q, idx) => {
+                  const asset = q.visual_asset_json;
+                  if (!asset || asset.kind !== "SCENARIO_LAB") return null;
+                  return (
+                    <ScenarioLab
+                      key={q.id}
+                      question={q}
+                      asset={asset}
+                      index={idx}
+                      initiallyMastered={Boolean(q.mastery && q.mastery.correct_count > 0)}
+                      onComplete={async (resPayload) => {
+                        const res = await submitSinglePractice({
+                          mode: "SCENARIO_LAB",
+                          responses: [
+                            {
+                              questionId: resPayload.questionId,
+                              selectedChoiceId: resPayload.selectedChoiceId,
+                              isCorrect: resPayload.isCorrect,
+                            },
+                          ],
+                        });
+                        if (res.ok) {
+                          toast.success(
+                            t("सही निर्णय लिया!", "Scenario Completed!"),
+                            t(`+${res.pointsAwarded ?? 10} अध्ययन अंक`, `+${res.pointsAwarded ?? 10} mastery pts`)
+                          );
+                        }
+                      }}
+                    />
+                  );
+                })}
+              </section>
+            )}
+
+          {/* 1A. 3D Flip Flashcards with Pronunciation & Audio */}
+          {(playSubMode === "ALL" || playSubMode === "FLASHCARD") &&
+            buckets.flashcards.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-lg font-bold text-ink flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-amber-ink" />
@@ -724,7 +1148,9 @@ export function PracticeHubClient({
                   const asset = q.visual_asset_json;
                   if (!asset || asset.kind !== "FLASHCARD") return null;
                   const flipped = Boolean(flippedCards[q.id]);
-                  const mastered = Boolean(masteredFlashcards[q.id]);
+                  const mastered =
+                    Boolean(masteredFlashcards[q.id]) ||
+                    Boolean(q.mastery && q.mastery.correct_count > 0);
 
                   return (
                     <Card
@@ -741,20 +1167,34 @@ export function PracticeHubClient({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <Badge variant={flipped ? "emerald" : "indigo"}>
-                            {flipped ? t("उत्तर / सूत्र", "Answer") : t("प्रश्न (टैप करें)", "Question (Tap to Flip)")}
+                            {flipped ? t("उत्तर / अर्थ", "Answer") : t("प्रश्न (टैप करें)", "Question (Tap to Flip)")}
                           </Badge>
                           {q.exam_year_tag && <Badge variant="amber">{q.exam_year_tag}</Badge>}
                         </div>
 
                         {!flipped ? (
-                          <div className="text-base font-bold text-ink leading-relaxed pt-1">
-                            <BiText hi={asset.front_hi} en={asset.front_en} />
+                          <div className="space-y-2 pt-1">
+                            <div className="text-base font-bold text-ink leading-relaxed">
+                              <BiText hi={asset.front_hi} en={asset.front_en} />
+                            </div>
+                            {asset.pronunciation_hi && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-academic/25 bg-indigo-soft px-2.5 py-0.5 text-xs font-semibold text-indigo-ink">
+                                <Volume2 className="h-3 w-3 shrink-0" />
+                                {t("उच्चारण:", "Say:")} {asset.pronunciation_hi}
+                              </span>
+                            )}
                           </div>
                         ) : (
                           <div className="space-y-2.5 pt-1">
                             <div className="text-sm sm:text-[15px] text-ink leading-relaxed font-medium">
                               <BiText hi={asset.back_hi} en={asset.back_en} />
                             </div>
+                            {asset.pronunciation_hi && (
+                              <div className="inline-flex items-center gap-1.5 rounded-md bg-surface border border-hairline px-2.5 py-1 text-xs font-semibold text-indigo-ink">
+                                <Volume2 className="h-3 w-3 shrink-0" />
+                                {t("उच्चारण:", "Pronunciation:")} {asset.pronunciation_hi}
+                              </div>
+                            )}
                             {asset.formula_latex && (
                               <div className="rounded-lg bg-surface border border-hairline px-3 py-2 text-center overflow-x-auto">
                                 <MathMarkdown content={`$$${asset.formula_latex}$$`} />
@@ -769,17 +1209,28 @@ export function PracticeHubClient({
                         )}
                       </button>
 
-                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-hairline">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            setFlippedCards((p) => ({ ...p, [q.id]: !p[q.id] }))
-                          }
-                          leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
-                        >
-                          {flipped ? t("प्रश्न देखें", "Show Front") : t("कार्ड पलटें", "Flip Card")}
-                        </Button>
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-hairline">
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setFlippedCards((p) => ({ ...p, [q.id]: !p[q.id] }))
+                            }
+                            leftIcon={<RotateCcw className="h-3.5 w-3.5" />}
+                          >
+                            {flipped ? t("प्रश्न देखें", "Show Front") : t("कार्ड पलटें", "Flip")}
+                          </Button>
+                          <ReadAloudButton
+                            text={asset.pronunciation_hi ? asset.front_en : undefined}
+                            textHi={asset.front_hi}
+                            textEn={asset.front_en}
+                            locale={asset.pronunciation_hi ? "en-IN" : undefined}
+                            rate={0.86}
+                            size="sm"
+                            label={t("सुनें", "Listen")}
+                          />
+                        </div>
                         <Button
                           size="sm"
                           variant={mastered ? "emerald" : "secondary"}
@@ -810,7 +1261,8 @@ export function PracticeHubClient({
           )}
 
           {/* 1B. Interactive Tap-to-Match Pairs */}
-          {buckets.matchPairs.map((q) => {
+          {(playSubMode === "ALL" || playSubMode === "MATCH_PAIRS") &&
+            buckets.matchPairs.map((q) => {
             const asset = q.visual_asset_json;
             if (!asset || asset.kind !== "MATCH_PAIRS") return null;
 
@@ -979,7 +1431,8 @@ export function PracticeHubClient({
           })}
 
           {/* 1C. Interactive Tap-to-Label SVG Diagrams */}
-          {buckets.diagramLabels.map((q) => {
+          {(playSubMode === "ALL" || playSubMode === "DIAGRAM_LABEL") &&
+            buckets.diagramLabels.map((q) => {
             const asset = q.visual_asset_json;
             if (!asset || asset.kind !== "DIAGRAM_LABEL") return null;
 
@@ -1152,40 +1605,96 @@ export function PracticeHubClient({
             );
           })}
 
-          {buckets.flashcards.length === 0 &&
+          {sentenceBuilders.length === 0 &&
+            shortcutStudios.length === 0 &&
+            excelSandboxes.length === 0 &&
+            scenarioLabs.length === 0 &&
+            buckets.flashcards.length === 0 &&
             buckets.matchPairs.length === 0 &&
             buckets.diagramLabels.length === 0 && (
               <Card className="text-center py-8 text-sm text-ink-secondary">
                 {t(
-                  "इस अध्याय के विज़ुअल अभ्यास जल्द जोड़े जा रहे हैं। कृपया ऑब्जेक्टिव या उत्तर लेखन टैब देखें।",
-                  "Visual play cards for this chapter are coming soon. Explore the MCQ or Subjective tabs!"
+                  "इस अध्याय के खेल-अभ्यास जल्द जोड़े जा रहे हैं। कृपया ऑब्जेक्टिव या उत्तर लेखन टैब देखें।",
+                  "Interactive play labs for this chapter are coming soon. Explore the MCQ or Subjective tabs!"
                 )}
               </Card>
             )}
         </div>
       )}
 
-      {/* ==================== TAB 2: 3-TIER OBJECTIVE LADDER ==================== */}
+      {/* ==================== TAB 2: 3-TIER OBJECTIVE LADDER (GUIDED PROGRESSION) ==================== */}
       {tab === "mcq" && (
         <div className="space-y-4">
+          {/* Guided Difficulty Progression Banner */}
+          {foundationStats.total > 0 && (
+            <Card
+              variant={foundationStats.boardUnlocked ? "subtle" : "warm"}
+              padding="sm"
+              className="flex flex-wrap items-center justify-between gap-3"
+            >
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={foundationStats.boardUnlocked ? "emerald" : "amber"}>
+                    {foundationStats.boardUnlocked
+                      ? t("बोर्ड एवं टॉपर स्तर अनलॉक!", "Board & Topper Tiers Unlocked!")
+                      : t("कदम 1: आसान जीत से शुरू करें", "Step 1: Start With Easy Wins")}
+                  </Badge>
+                  <span className="text-xs font-bold text-ink-secondary">
+                    {t(
+                      `बुनियादी समझ: ${foundationStats.correct}/${foundationStats.total} सही (${foundationStats.pct}%)`,
+                      `Foundation: ${foundationStats.correct}/${foundationStats.total} solved (${foundationStats.pct}%)`
+                    )}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-secondary">
+                  {foundationStats.boardUnlocked
+                    ? t(
+                        "शाबाश! आपकी नींव पक्की है — अब बोर्ड परीक्षा और टॉपर स्तर के प्रश्न हल करें।",
+                        "Awesome confidence! Your foundation is strong — challenge yourself with Board & Topper tiers."
+                      )
+                    : t(
+                        "पहले बुनियादी (Foundation) प्रश्नों में 60%+ स्कोर करें ताकि आत्मविश्वास बने। आप चाहें तो कोई भी स्तर अभी देख सकते हैं।",
+                        "Score 60%+ in Foundation first to build confidence — or jump to any tier whenever you feel curious."
+                      )}
+                </p>
+              </div>
+              {foundationStats.boardUnlocked && tierFilter === "FOUNDATION" && (
+                <Button
+                  size="sm"
+                  variant="emerald"
+                  onClick={() => setTierFilter("BOARD")}
+                  rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                >
+                  {t("बोर्ड स्तर खोलें", "Try Board Tier")}
+                </Button>
+              )}
+            </Card>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             {(
               [
+                { id: "FOUNDATION" as const, hi: "1. बुनियादी समझ (आसान)", en: "1. Foundation (Easy)" },
+                { id: "BOARD" as const, hi: "2. बोर्ड स्तर", en: "2. Board" },
+                { id: "TOPPER" as const, hi: "3. टॉपर स्तर", en: "3. Topper" },
                 { id: "ALL" as const, hi: "सभी स्तर", en: "All Tiers" },
-                { id: "FOUNDATION" as const, hi: "बुनियादी समझ", en: "Foundation" },
-                { id: "BOARD" as const, hi: "बोर्ड स्तर", en: "Board" },
-                { id: "TOPPER" as const, hi: "टॉपर स्तर", en: "Topper" },
               ] as const
-            ).map((f) => (
-              <Button
-                key={f.id}
-                size="sm"
-                variant={tierFilter === f.id ? "primary" : "secondary"}
-                onClick={() => setTierFilter(f.id)}
-              >
-                {t(f.hi, f.en)}
-              </Button>
-            ))}
+            ).map((f) => {
+              const tierCount =
+                f.id === "ALL"
+                  ? buckets.mcqs.length
+                  : buckets.mcqs.filter((q) => q.difficulty_tier === f.id).length;
+              return (
+                <Button
+                  key={f.id}
+                  size="sm"
+                  variant={tierFilter === f.id ? "primary" : "secondary"}
+                  onClick={() => setTierFilter(f.id)}
+                >
+                  {t(f.hi, f.en)} ({tierCount})
+                </Button>
+              );
+            })}
           </div>
 
           {filteredMcqs.length === 0 ? (
@@ -1388,7 +1897,17 @@ export function PracticeHubClient({
                 <Card key={q.id} className="space-y-2.5">
                   <div className="flex items-center gap-2">
                     <Badge variant="amber">{q.exam_year_tag}</Badge>
-                    <Badge variant="indigo">{q.question_type}</Badge>
+                    <Badge variant="indigo">
+                      {q.question_type === "LONG_5M"
+                        ? t("5 अंक · दीर्घ उत्तरीय", "5 Marks · Long Answer")
+                        : q.question_type === "SHORT_2M"
+                        ? t("2 अंक · लघु उत्तरीय", "2 Marks · Short Answer")
+                        : q.question_type === "FLASHCARD"
+                        ? t("फ्लैशकार्ड", "Flashcard")
+                        : q.question_type === "SENTENCE_BUILDER"
+                        ? t("वाक्य निर्माण", "Sentence Builder")
+                        : t("अभ्यास प्रश्न", "Practice Item")}
+                    </Badge>
                   </div>
                   <div className="font-bold text-ink">
                     <MathMarkdown inline content={lang === "EN" ? q.q_en : q.q_hi} />
