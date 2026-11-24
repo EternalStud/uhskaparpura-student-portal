@@ -54,6 +54,7 @@ A bilingual (Hindi-first, English, and Dual mode) academic learning, interactive
    Fill in all 15 required variables (Supabase keys, `openssl rand -hex 32` secrets, Cloudflare Turnstile, Google One OAuth2, Gemini API key, and `CRON_SECRET`) in `.env.local`. Never commit `.env.local`.
 
 3. **Apply Supabase SQL migrations (`001`–`007`)**
+   - **Automated CLI (Recommended):** use `node scripts/apply-migrations.mjs` (see subsection below).
    - **Fresh database (all 7 migrations + verification query):** paste and run [`supabase/ALL_MIGRATIONS_COMBINED.sql`](./supabase/ALL_MIGRATIONS_COMBINED.sql) in **Supabase → SQL Editor → New Query**.
    - **Existing database already on `001`–`003` (incremental Sprint 1–3 ICT & English upgrade):** paste and run [`supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql`](./supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql) in **Supabase → SQL Editor → New Query**.
    - **Individual migration files** (100% idempotent, in order):
@@ -76,6 +77,26 @@ A bilingual (Hindi-first, English, and Dual mode) academic learning, interactive
    ```
    Open [http://localhost:3000](http://localhost:3000).
 
+### Automated CLI Migrations (`node scripts/apply-migrations.mjs`)
+
+Apply `004`–`007` and all future `008`–`099` subject seeds directly from the terminal without manual SQL Editor copy-pasting (zero extra npm dependencies; tracks applied files in RLS-locked `public._applied_migrations` and prints live post-apply row counts):
+
+1. Add a **strictly local CLI-only** credential to `.env.local` (**never** add to Vercel):
+   - **Mode A (Preferred — HTTPS):** `SUPABASE_ACCESS_TOKEN=` from [Supabase Account Tokens](https://supabase.com/dashboard/account/tokens)
+   - **Mode B (Fallback — Direct Postgres):** `SUPABASE_DB_URL=` (uses local `psql -v ON_ERROR_STOP=1 -f`)
+2. Preview or apply migrations:
+   ```bash
+   # Preview which files would run without executing SQL
+   node scripts/apply-migrations.mjs --dry-run --from 004
+
+   # Apply 004–007 (and any future 008+ migrations not yet recorded)
+   node scripts/apply-migrations.mjs --from 004
+
+   # Apply one specific file, or force re-apply idempotent migrations
+   node scripts/apply-migrations.mjs --file supabase/migrations/004_interactive_labs_and_universal_skills.sql
+   node scripts/apply-migrations.mjs --from 004 --force
+   ```
+
 ---
 
 ## App & CLI Scripts
@@ -94,6 +115,7 @@ A bilingual (Hindi-first, English, and Dual mode) academic learning, interactive
 
 | Command | Purpose |
 | :--- | :--- |
+| `node scripts/apply-migrations.mjs [--from 004] [--file <path>] [--dry-run] [--force]` | Automated idempotent Supabase SQL migration runner (Mode A HTTPS Management API via `SUPABASE_ACCESS_TOKEN` or Mode B `psql` via `SUPABASE_DB_URL`), tracking runs in RLS-locked `public._applied_migrations` with live post-apply table counts |
 | `node scripts/preflight-check.mjs` | Zero-secret preflight verifier for all 15 env vars, Supabase `001`–`007` schema & seed integrity (`syllabus_alias_of`, `play_completed`, 104 subjects, 100 chapters, 31 notes/plans, 506 questions), OAuth lease RPC, 5 TB Google One Drive Vault writability, and Gemini API reachability |
 | `node scripts/super-admin-recovery.mjs <list\|bootstrap\|reset-password\|reset-totp>` | Bootstrap or recover Super Admin credentials & TOTP 2FA directly against Supabase via `service_role` |
 | `node scripts/generate-google-oauth-token.mjs` | Generate a production Google One Drive OAuth2 refresh token and initialize the `StudentsOfBihar_Vault` root folder |
