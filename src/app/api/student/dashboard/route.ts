@@ -1,5 +1,6 @@
 import { requireRole, jsonNoStore } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizeSubjectRow } from "@/lib/supabase/schema-compat";
 import { getIstDayBoundsUtc, getIstWeekStart, getTodayIst } from "@/lib/time/ist";
 import {
   checkActiveLivePinExamLock,
@@ -110,7 +111,11 @@ export async function GET(request: Request) {
     .in("id", fetchSubjectIds)
     .order("sort_order", { ascending: true });
 
-  const allFetchedSubjects: SubjectRow[] = (rawSubjectsData ?? []) as SubjectRow[];
+  const allFetchedSubjects: SubjectRow[] = (
+    (rawSubjectsData ?? []) as Array<
+      Omit<SubjectRow, "syllabus_alias_of"> & { syllabus_alias_of?: string | null }
+    >
+  ).map(normalizeSubjectRow);
 
   // Resolve syllabus aliases so e.g. bseb-12-lang2-eng seamlessly shows bseb-12-lang1-eng chapters
   // and bseb-9/10-skill-ict is deduped against universal 'skill-ict-lab'

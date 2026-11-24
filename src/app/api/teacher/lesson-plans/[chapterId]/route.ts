@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { fetchSubjectWithAlias } from "@/lib/supabase/schema-compat";
 import { jsonNoStore, requireRole } from "@/lib/auth";
 
 /**
@@ -37,11 +38,7 @@ export async function GET(
 
   const [{ data: subject }, { data: lessonPlan, error: lpErr }, { data: siblingChapters }] =
     await Promise.all([
-      supabase
-        .from("subjects")
-        .select("id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order, syllabus_alias_of")
-        .eq("id", chapter.subject_id)
-        .maybeSingle(),
+      fetchSubjectWithAlias(supabase, chapter.subject_id),
       supabase
         .from("lesson_plans")
         .select(

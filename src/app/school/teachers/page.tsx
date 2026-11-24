@@ -20,7 +20,7 @@ import {
   Modal,
   useToast,
 } from "@/components/ui";
-import type { ClassNum } from "@/types/database";
+import type { ClassNum, SubjectClassNum } from "@/types/database";
 
 interface TeacherItem {
   teacherId: string;
@@ -38,7 +38,7 @@ interface TeacherItem {
 
 interface SubjectOption {
   id: string;
-  class_num: ClassNum;
+  class_num: SubjectClassNum;
   stream: string;
   category: string;
   name_en: string;
@@ -131,9 +131,26 @@ export default function SchoolTeachersPage() {
   };
 
   const toggleSubject = (sid: string) => {
-    setSelectedSubjects((prev) =>
-      prev.includes(sid) ? prev.filter((s) => s !== sid) : [...prev, sid]
-    );
+    const subj = subjectById.get(sid);
+    setSelectedSubjects((prev) => {
+      const adding = !prev.includes(sid);
+      if (
+        adding &&
+        subj &&
+        (subj.class_num === 9 ||
+          subj.class_num === 10 ||
+          subj.class_num === 11 ||
+          subj.class_num === 12)
+      ) {
+        const cls = subj.class_num;
+        setSelectedClasses((prevClasses) =>
+          prevClasses.includes(cls)
+            ? prevClasses
+            : [...prevClasses, cls].sort((a, b) => a - b)
+        );
+      }
+      return adding ? [...prev, sid] : prev.filter((s) => s !== sid);
+    });
   };
 
   const saveSubjectMapping = async () => {
@@ -287,7 +304,9 @@ export default function SchoolTeachersPage() {
   const subjectsByClass = useMemo(() => {
     const grouped: Record<ClassNum, SubjectOption[]> = { 9: [], 10: [], 11: [], 12: [] };
     for (const s of subjects) {
-      grouped[s.class_num]?.push(s);
+      if (s.class_num === 9 || s.class_num === 10 || s.class_num === 11 || s.class_num === 12) {
+        grouped[s.class_num].push(s);
+      }
     }
     return grouped;
   }, [subjects]);
@@ -369,7 +388,9 @@ export default function SchoolTeachersPage() {
                           const s = subjectById.get(sid);
                           return (
                             <Badge key={sid} variant="outline">
-                              {s ? `C${s.class_num} ${t(s.name_hi, s.name_en)}` : sid}
+                              {s
+                                ? `${s.class_num === 0 ? t("कौशल लैब", "Skill Lab") : `C${s.class_num}`} ${t(s.name_hi, s.name_en)}`
+                                : sid}
                             </Badge>
                           );
                         })

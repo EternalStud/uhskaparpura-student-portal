@@ -3,15 +3,19 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowRight,
   BookMarked,
   Clock,
   FileCheck2,
   Loader2,
+  RefreshCw,
   Search,
+  Sparkles,
 } from "lucide-react";
 import { useLanguage } from "@/components/providers/LanguageProvider";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -25,6 +29,7 @@ interface LessonPlanSubject {
   name_hi: string;
   name_en: string;
   isAssigned: boolean;
+  isUniversal?: boolean;
   lessonPlansCount: number;
   chapters: Array<{
     id: string;
@@ -52,11 +57,15 @@ export function LessonPlansClient() {
   const [search, setSearch] = useState("");
   const [onlyReady, setOnlyReady] = useState(false);
   const [subjects, setSubjects] = useState<LessonPlanSubject[]>([]);
+  const [totalPlansAvailable, setTotalPlansAvailable] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams({ scope });
     if (classNum) params.set("classNum", classNum);
 
@@ -65,12 +74,32 @@ export function LessonPlansClient() {
         const res = await fetch(`/api/teacher/lesson-plans?${params.toString()}`, {
           cache: "no-store",
         });
-        const json = (await res.json()) as {
+        const json = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
           subjects?: LessonPlanSubject[];
+          totalPlansAvailable?: number;
+          error?: string;
         };
-        if (active && res.ok && json.ok) {
-          setSubjects(json.subjects ?? []);
+        if (!res.ok || !json.ok) {
+          throw new Error(
+            json.error || `Unable to load lesson plans (HTTP ${res.status}).`
+          );
+        }
+        if (active) {
+          setSubjects(Array.isArray(json.subjects) ? json.subjects : []);
+          setTotalPlansAvailable(
+            typeof json.totalPlansAvailable === "number" ? json.totalPlansAvailable : 0
+          );
+        }
+      } catch (err) {
+        if (active) {
+          setSubjects([]);
+          setTotalPlansAvailable(0);
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load lesson plans right now."
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -80,13 +109,13 @@ export function LessonPlansClient() {
     return () => {
       active = false;
     };
-  }, [scope, classNum]);
+  }, [scope, classNum, reloadTick]);
 
   const q = search.trim().toLowerCase();
 
   const filteredSubjects = subjects
     .map((subj) => {
-      const chapters = subj.chapters.filter((ch) => {
+      const chapters = (Array.isArray(subj.chapters) ? subj.chapters : []).filter((ch) => {
         if (onlyReady && !ch.hasLessonPlan) return false;
         if (!q) return true;
         return (
@@ -100,22 +129,51 @@ export function LessonPlansClient() {
     })
     .filter((subj) => subj.chapters.length > 0);
 
+  const nonUniversalSubjects = subjects.filter((s) => !s.isUniversal && s.class_num !== 0);
+  const nonUniversalReadyCount = nonUniversalSubjects.reduce(
+    (sum, s) => sum + s.lessonPlansCount,
+    0
+  );
+  const universalReadyCount = subjects
+    .filter((s) => s.isUniversal || s.class_num === 0)
+    .reduce((sum, s) => sum + s.lessonPlansCount, 0);
+  const showNarrowMySubjectHint =
+    !loading &&
+    !error &&
+    scope === "my" &&
+    !classNum &&
+    !q &&
+    nonUniversalReadyCount === 0 &&
+    universalReadyCount > 0;
+
+  const hasActiveFilters = Boolean(q || classNum || onlyReady);
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="space-y-1.5 border-b border-hairline pb-5">
-        <Badge variant="indigo" icon={<BookMarked className="h-3.5 w-3.5" />}>
-          {t("केवल शिक्षकों के लिए · आधिकारिक BSEB", "Educator Exclusive · Official BSEB")}
-        </Badge>
-        <h1 className="text-2xl sm:text-3xl font-bold text-ink tracking-tight">
-          {t("विषय एवं अध्याय पाठ योजनाएँ", "BSEB Subject & Chapter Lesson Plans")}
-        </h1>
-        <p className="text-sm text-ink-secondary max-w-2xl">
-          {t(
-            "पीरियड-वार शिक्षण प्रवाह, ब्लैकबोर्ड मुख्य बिंदु, विद्यार्थियों की सामान्य भ्रांतियाँ, कक्षा गतिविधियाँ और प्रिंट-रेडी गृहकार्य।",
-            "Period-by-period teaching flow, blackboard summaries, common student misconceptions, classroom activities, and printable homework."
-          )}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-hairline pb-5">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="indigo" icon={<BookMarked className="h-3.5 w-3.5" />}>
+              {t("केवल शिक्षकों के लिए · आधिकारिक BSEB", "Educator Exclusive · Official BSEB")}
+            </Badge>
+            {!loading && !error && (
+              <Badge variant="emerald" icon={<FileCheck2 className="h-3.5 w-3.5" />}>
+                {totalPlansAvailable}{" "}
+                {t("तैयार पाठ योजनाएँ", "Ready Lesson Plans")}
+              </Badge>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-ink tracking-tight">
+            {t("विषय एवं अध्याय पाठ योजनाएँ", "BSEB Subject & Chapter Lesson Plans")}
+          </h1>
+          <p className="text-sm text-ink-secondary max-w-2xl">
+            {t(
+              "पीरियड-वार शिक्षण प्रवाह, ब्लैकबोर्ड मुख्य बिंदु, विद्यार्थियों की सामान्य भ्रांतियाँ, कक्षा गतिविधियाँ और प्रिंट-रेडी गृहकार्य।",
+              "Period-by-period teaching flow, blackboard summaries, common student misconceptions, classroom activities, and printable homework."
+            )}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -165,6 +223,30 @@ export function LessonPlansClient() {
         </div>
       </div>
 
+      {showNarrowMySubjectHint && (
+        <Card variant="subtle" padding="sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="h-4 w-4 text-indigo-ink shrink-0 mt-0.5" />
+              <p className="text-xs sm:text-sm text-ink-secondary leading-relaxed">
+                {t(
+                  `सभी शिक्षकों के लिए ${universalReadyCount} ICT और English Foundation पाठ योजनाएँ नीचे तैयार हैं। अन्य BSEB विषयों की सभी पाठ योजनाएँ देखने के लिए 'सभी BSEB विषय' खोलें।`,
+                  `${universalReadyCount} universal ICT & English Foundation lesson plans are ready below for all teachers. Switch to All BSEB Subjects to browse every subject's ready plans.`
+                )}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setScope("all")}
+              className="shrink-0"
+            >
+              {t("सभी BSEB विषय देखें", "Browse All BSEB Subjects")}
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {loading ? (
         <div className="flex min-h-[35vh] items-center justify-center">
           <div className="flex items-center gap-2 text-sm text-ink-secondary">
@@ -172,20 +254,75 @@ export function LessonPlansClient() {
             <span>{t("पाठ योजनाएँ लोड हो रही हैं...", "Loading lesson plans...")}</span>
           </div>
         </div>
+      ) : error ? (
+        <Card variant="warm" className="py-8 px-6 text-center space-y-3">
+          <AlertTriangle className="mx-auto h-8 w-8 text-amber-ink" />
+          <p className="text-base font-bold text-ink">
+            {t("पाठ योजनाएँ लोड नहीं हो सकीं", "Could not load lesson plans")}
+          </p>
+          <p className="text-sm text-amber-ink max-w-md mx-auto">
+            {t(
+              "सर्वर से पाठ योजनाएँ प्राप्त करते समय अस्थायी समस्या आई। कृपया पुनः प्रयास करें।",
+              error
+            )}
+          </p>
+          <div className="pt-1 flex justify-center">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<RefreshCw className="h-4 w-4" />}
+              onClick={() => setReloadTick((n) => n + 1)}
+            >
+              {t("पुनः प्रयास करें", "Retry")}
+            </Button>
+          </div>
+        </Card>
       ) : filteredSubjects.length === 0 ? (
-        <Card variant="subtle" className="text-center py-10 space-y-2">
+        <Card variant="subtle" className="text-center py-10 px-6 space-y-3">
           <BookMarked className="mx-auto h-8 w-8 text-ink-muted" />
           <p className="text-base font-bold text-ink">
-            {t("कोई पाठ योजना नहीं मिली", "No matching chapters found")}
+            {t("इस फ़िल्टर में कोई पाठ योजना नहीं मिली", "No matching chapters found")}
           </p>
-          <p className="text-sm text-ink-secondary">
+          <p className="text-sm text-ink-secondary max-w-md mx-auto">
             {scope === "my"
               ? t(
-                  "सभी BSEB विषयों को देखने के लिए 'सभी BSEB विषय' टैब चुनें।",
-                  "Switch to 'All BSEB Subjects' to browse all available lesson plans."
+                  "आपके चुने गए विषयों में अभी विस्तृत पाठ योजनाएँ जोड़ी जा रही हैं। सभी तैयार BSEB पाठ योजनाएँ तुरंत देखने के लिए नीचे बटन दबाएँ।",
+                  "Detailed lesson plans for your assigned subject are being expanded. Switch to All BSEB Subjects to browse all ready lesson plans right away."
                 )
-              : t("कृपया खोज शब्द या कक्षा फ़िल्टर बदलें।", "Try adjusting your search or class filter.")}
+              : t(
+                  "कृपया खोज शब्द या कक्षा फ़िल्टर बदलकर पुनः देखें।",
+                  "Try clearing your search or adjusting the class filter."
+                )}
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+            {scope === "my" && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  setScope("all");
+                  setClassNum("");
+                  setSearch("");
+                  setOnlyReady(false);
+                }}
+              >
+                {t("सभी BSEB विषय देखें", "View All BSEB Subjects")}
+              </Button>
+            )}
+            {hasActiveFilters && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setClassNum("");
+                  setSearch("");
+                  setOnlyReady(false);
+                }}
+              >
+                {t("फ़िल्टर साफ़ करें", "Clear Filters")}
+              </Button>
+            )}
+          </div>
         </Card>
       ) : (
         <div className="space-y-6">

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { isMissingColumnError } from "@/lib/supabase/schema-compat";
 import { diffIstDays, getIstWeekStart, getTodayIst } from "@/lib/time/ist";
 import {
   computeChapterMedal,
@@ -95,20 +96,27 @@ export async function checkActiveLivePinExamLock(
  * Resolves a single subject ID through `subjects.syllabus_alias_of` to its canonical
  * syllabus subject ID (e.g. `bseb-12-lang2-eng` -> `bseb-12-lang1-eng`,
  * `bseb-10-skill-ict` -> `skill-ict-lab`).
+ * Gracefully falls back to `subjectId` if migration `004` (`syllabus_alias_of`) is not yet applied.
  */
 export async function resolveCanonicalSubjectId(subjectId: string): Promise<string> {
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("subjects")
     .select("id, syllabus_alias_of")
     .eq("id", subjectId)
     .maybeSingle();
+
+  if (error) {
+    if (isMissingColumnError(error)) return subjectId;
+    return subjectId;
+  }
 
   return data?.syllabus_alias_of ?? subjectId;
 }
 
 /**
  * Batch resolves a list of subject IDs to a map of `subjectId -> canonicalSubjectId`.
+ * Gracefully falls back to identity mapping if migration `004` is not yet applied.
  */
 export async function resolveSubjectAliasMap(
   subjectIds: string[]
@@ -117,19 +125,55 @@ export async function resolveSubjectAliasMap(
   const map = new Map<string, string>();
   if (unique.length === 0) return map;
 
+  for (const id of unique) {
+    map.set(id, id);
+  }
+
   const supabase = getSupabaseAdmin();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("subjects")
     .select("id, syllabus_alias_of")
     .in("id", unique);
 
-  for (const id of unique) {
-    map.set(id, id);
+  if (error) {
+    if (isMissingColumnError(error)) return map;
+    return map;
   }
+
   for (const row of data ?? []) {
     map.set(row.id, row.syllabus_alias_of ?? row.id);
   }
   return map;
+}
+
+/**
+ * Expands a list of subject IDs to include their canonical `syllabus_alias_of` targets
+ * AND any sibling alias subject IDs pointing to those same canonical targets.
+ * Gracefully returns `subjectIds` unchanged if migration `004` is not yet applied.
+ */
+export async function expandSubjectIdsWithAliases(
+  subjectIds: string[]
+): Promise<string[]> {
+  const unique = Array.from(new Set(subjectIds.filter(Boolean)));
+  if (unique.length === 0) return [];
+
+  const aliasMap = await resolveSubjectAliasMap(unique);
+  const canonicalIds = Array.from(new Set([...unique, ...aliasMap.values()]));
+  const expanded = new Set<string>(canonicalIds);
+
+  const supabase = getSupabaseAdmin();
+  const { data: reverseAliases, error } = await supabase
+    .from("subjects")
+    .select("id")
+    .in("syllabus_alias_of", canonicalIds);
+
+  if (!error) {
+    for (const row of reverseAliases ?? []) {
+      expanded.add(row.id);
+    }
+  }
+
+  return Array.from(expanded);
 }
 
 /**

@@ -254,7 +254,13 @@ export async function GET(
     todayIst,
     chapter,
     subject: subjectRes.data ?? null,
-    progress: prog ?? null,
+    progress: prog
+      ? {
+          ...prog,
+          play_completed: Boolean(prog.play_completed),
+          subjective_completed: Boolean(prog.subjective_completed),
+        }
+      : null,
     fourStage,
     buckets: {
       sentenceBuilders,

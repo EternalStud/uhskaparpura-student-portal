@@ -280,11 +280,11 @@ async function checkSupabaseLive() {
 
   const tableExpectations = [
     { table: 'schools', min: 0, note: 'Onboard schools via Super Admin Console' },
-    { table: 'subjects', min: 100, note: 'Run supabase/ALL_MIGRATIONS_COMBINED.sql' },
-    { table: 'chapters', min: 70, note: 'Run supabase/ALL_MIGRATIONS_COMBINED.sql' },
-    { table: 'chapter_notes', min: 6, note: 'Run supabase/ALL_MIGRATIONS_COMBINED.sql' },
-    { table: 'lesson_plans', min: 6, note: 'Run supabase/ALL_MIGRATIONS_COMBINED.sql' },
-    { table: 'questions', min: 40, note: 'Run supabase/ALL_MIGRATIONS_COMBINED.sql' },
+    { table: 'subjects', min: 104, note: 'Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql (or ALL_MIGRATIONS_COMBINED.sql)' },
+    { table: 'chapters', min: 100, note: 'Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql (004–007)' },
+    { table: 'chapter_notes', min: 31, note: 'Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql (004–007)' },
+    { table: 'lesson_plans', min: 31, note: 'Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql (004–007)' },
+    { table: 'questions', min: 500, note: 'Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql (004–007)' },
     { table: 'super_admins', min: 1, note: 'Run: node scripts/super-admin-recovery.mjs bootstrap --email <you> --name "<Name>"' },
   ];
 
@@ -336,6 +336,77 @@ async function checkSupabaseLive() {
     }
   }
 
+  // Verify Sprint 1–3 schema & curriculum integrity (004–007: syllabus_alias_of, universal skill labs, 4-stage mastery)
+  const [aliasProbeRes, fourStageProbeRes] = await Promise.all([
+    supabase
+      .from('subjects')
+      .select('id, class_num, syllabus_alias_of')
+      .in('id', [
+        'skill-ict-lab',
+        'skill-eng-foundation',
+        'bseb-10-skill-ict',
+        'bseb-12-sci-add-cs',
+        'bseb-12-lang2-eng',
+      ]),
+    supabase
+      .from('student_chapter_progress')
+      .select('play_completed, subjective_completed')
+      .limit(1),
+  ]);
+
+  if (aliasProbeRes.error) {
+    const missing004 =
+      aliasProbeRes.error.code === '42703' ||
+      /syllabus_alias_of/i.test(aliasProbeRes.error.message || '');
+    record(
+      section,
+      'Schema subjects.syllabus_alias_of',
+      'ACTION-REQUIRED',
+      missing004
+        ? 'Migrations 004–007 NOT YET RUN in Supabase! Paste & run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql in Supabase SQL Editor.'
+        : `Query failed (${aliasProbeRes.error.message}).`
+    );
+  } else {
+    const rowsById = new Map((aliasProbeRes.data || []).map((r) => [r.id, r]));
+    const hasIct = rowsById.has('skill-ict-lab');
+    const hasEng = rowsById.has('skill-eng-foundation');
+    const csAliased = rowsById.get('bseb-12-sci-add-cs')?.syllabus_alias_of === 'skill-ict-lab';
+    const engAliased =
+      rowsById.get('bseb-12-lang2-eng')?.syllabus_alias_of === 'bseb-12-lang1-eng';
+
+    record(
+      section,
+      'Schema subjects.syllabus_alias_of',
+      hasIct && hasEng && engAliased ? 'PASS' : 'ACTION-REQUIRED',
+      hasIct && hasEng
+        ? `Column present; universal labs seeded (skill-ict-lab, skill-eng-foundation); aliases: eng=${engAliased}, cs=${csAliased}.${
+            csAliased ? '' : ' Re-run 004 / SPRINT_ICT_ENGLISH_UPGRADE.sql to alias Class 11-12 CS -> skill-ict-lab.'
+          }`
+        : `Column exists, but universal labs missing (skill-ict-lab=${hasIct}, skill-eng-foundation=${hasEng}). Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql.`
+    );
+  }
+
+  if (fourStageProbeRes.error) {
+    const missing004 =
+      fourStageProbeRes.error.code === '42703' ||
+      /play_completed|subjective_completed/i.test(fourStageProbeRes.error.message || '');
+    record(
+      section,
+      'Schema 4-Stage Mastery Columns',
+      'ACTION-REQUIRED',
+      missing004
+        ? 'Migrations 004–007 NOT YET RUN in Supabase (play_completed / subjective_completed missing). Run supabase/SPRINT_ICT_ENGLISH_UPGRADE.sql.'
+        : `Query failed (${fourStageProbeRes.error.message}).`
+    );
+  } else {
+    record(
+      section,
+      'Schema 4-Stage Mastery Columns',
+      'PASS',
+      'student_chapter_progress.play_completed & subjective_completed verified.'
+    );
+  }
+
   // Verify server-only RPC `acquire_oauth_refresh_lease` & `release_oauth_refresh_lease`
   const probeProvider = '__preflight_probe__';
   const probeLockKey = 910_202_699;
@@ -354,8 +425,12 @@ async function checkSupabaseLive() {
         `RPC failed (${rpcErr.message}). Re-run supabase/ALL_MIGRATIONS_COMBINED.sql.`
       );
     } else {
-      await supabase.rpc('release_oauth_refresh_lease', { p_provider: probeProvider }).catch(() => undefined);
-      await supabase.from('system_oauth_tokens').delete().eq('provider', probeProvider).catch(() => undefined);
+      await Promise.resolve(
+        supabase.rpc('release_oauth_refresh_lease', { p_provider: probeProvider })
+      ).catch(() => undefined);
+      await Promise.resolve(
+        supabase.from('system_oauth_tokens').delete().eq('provider', probeProvider)
+      ).catch(() => undefined);
       record(
         section,
         'RPC acquire_oauth_refresh_lease',

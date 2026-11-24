@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import {
+  isMissingColumnError,
+  normalizeSubjectRow,
+  SUBJECT_SELECT_FULL,
+  SUBJECT_SELECT_LEGACY,
+} from "@/lib/supabase/schema-compat";
 import { jsonNoStore, requireRole, validateCsrf } from "@/lib/auth";
 import type { ClassNum, SubjectRow } from "@/types/database";
 
@@ -25,19 +31,45 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseAdmin();
 
-  const { data: subjects, error } = await supabase
+  let allSubjects: SubjectRow[] = [];
+  const firstRes = await supabase
     .from("subjects")
-    .select(
-      "id, bseb_code, class_num, stream, category, name_en, name_hi, icon_name, accent_color, sort_order, syllabus_alias_of"
-    )
+    .select(SUBJECT_SELECT_FULL)
     .order("class_num", { ascending: true })
     .order("sort_order", { ascending: true });
 
-  if (error) {
-    return jsonNoStore({ error: "Unable to load BSEB subject catalog." }, { status: 500 });
+  if (firstRes.error) {
+    if (isMissingColumnError(firstRes.error)) {
+      const fallbackRes = await supabase
+        .from("subjects")
+        .select(SUBJECT_SELECT_LEGACY)
+        .order("class_num", { ascending: true })
+        .order("sort_order", { ascending: true });
+      if (fallbackRes.error) {
+        return jsonNoStore({ error: "Unable to load BSEB subject catalog." }, { status: 500 });
+      }
+      allSubjects = ((fallbackRes.data ?? []) as unknown as Array<
+        Omit<SubjectRow, "syllabus_alias_of">
+      >).map(normalizeSubjectRow);
+    } else {
+      return jsonNoStore({ error: "Unable to load BSEB subject catalog." }, { status: 500 });
+    }
+  } else {
+    allSubjects = ((firstRes.data ?? []) as unknown as SubjectRow[]).map(normalizeSubjectRow);
   }
 
-  const allSubjects: SubjectRow[] = (subjects ?? []) as SubjectRow[];
+  // Derive effective assignedClasses from assignedSubjectIds if assigned_classes is empty or partial
+  const effectiveClassSet = new Set<ClassNum>(session.teacher.assignedClasses);
+  const assignedSubjSet = new Set(session.teacher.assignedSubjectIds);
+  for (const s of allSubjects) {
+    if (
+      assignedSubjSet.has(s.id) &&
+      (s.class_num === 9 || s.class_num === 10 || s.class_num === 11 || s.class_num === 12)
+    ) {
+      effectiveClassSet.add(s.class_num);
+    }
+  }
+  const effectiveAssignedClasses = Array.from(effectiveClassSet).sort((a, b) => a - b);
 
   const grouped = {
     universalSkills: allSubjects.filter((s) => s.class_num === 0),
@@ -57,7 +89,7 @@ export async function GET(request: Request) {
       fullName: session.teacher.fullName,
       teacherTitle: session.teacher.teacherTitle,
       subjectsConfigured: session.teacher.subjectsConfigured,
-      assignedClasses: session.teacher.assignedClasses,
+      assignedClasses: effectiveAssignedClasses,
       assignedSubjectIds: session.teacher.assignedSubjectIds,
     },
     subjects: allSubjects,

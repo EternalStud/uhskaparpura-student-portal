@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonNoStore, requireRole, validateCsrf } from "@/lib/auth";
 import { sanitizePlainText } from "@/lib/sanitize/content";
+import { resolveCanonicalSubjectId } from "@/app/api/student/_helpers";
 import type { SubmissionSourceType, SubmissionStatus } from "@/types/database";
 
 /**
@@ -247,7 +248,13 @@ export async function POST(request: Request) {
   if (!subject) {
     return jsonNoStore({ error: "Selected subject was not found." }, { status: 400 });
   }
-  if (chapterId && (!chapterRes.data || chapterRes.data.subject_id !== subjectId)) {
+  const canonicalSubjectId = await resolveCanonicalSubjectId(subjectId);
+  if (
+    chapterId &&
+    (!chapterRes.data ||
+      (chapterRes.data.subject_id !== subjectId &&
+        chapterRes.data.subject_id !== canonicalSubjectId))
+  ) {
     return jsonNoStore(
       { error: "Selected chapter does not belong to the chosen subject." },
       { status: 400 }

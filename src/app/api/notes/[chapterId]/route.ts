@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireRole, jsonNoStore } from "@/lib/auth/session";
 import { validateCsrf } from "@/lib/auth/csrf";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { upsertChapterProgressCompat } from "@/lib/supabase/schema-compat";
 import {
   awardStudentStudyProgress,
   checkActiveLivePinExamLock,
@@ -137,19 +138,25 @@ export async function GET(
     chapter,
     subject: subjectRes.data ?? null,
     note: noteRes.data ?? null,
-    progress: prog ?? {
-      student_id: session.principalId,
-      chapter_id: chapter.id,
-      notes_completed: false,
-      notes_progress_pct: 0,
-      play_completed: false,
-      subjective_completed: false,
-      flashcards_mastered: 0,
-      practice_attempted: 0,
-      practice_correct: 0,
-      mastery_pct: 0,
-      last_studied_at: null,
-    },
+    progress: prog
+      ? {
+          ...prog,
+          play_completed: Boolean(prog.play_completed),
+          subjective_completed: Boolean(prog.subjective_completed),
+        }
+      : {
+          student_id: session.principalId,
+          chapter_id: chapter.id,
+          notes_completed: false,
+          notes_progress_pct: 0,
+          play_completed: false,
+          subjective_completed: false,
+          flashcards_mastered: 0,
+          practice_attempted: 0,
+          practice_correct: 0,
+          mastery_pct: 0,
+          last_studied_at: null,
+        },
     fourStage,
     practiceCounts,
     navigation: {
@@ -253,22 +260,19 @@ export async function POST(
 
   const finalMasteryPct = Math.max(existing?.mastery_pct ?? 0, fourStage.totalPct);
 
-  await supabase.from("student_chapter_progress").upsert(
-    {
-      student_id: session.principalId,
-      chapter_id: chapterId,
-      notes_completed: nextCompleted,
-      notes_progress_pct: nextNotesPct,
-      play_completed: Boolean(existing?.play_completed),
-      subjective_completed: Boolean(existing?.subjective_completed),
-      flashcards_mastered: existing?.flashcards_mastered ?? 0,
-      practice_attempted: practiceAttempted,
-      practice_correct: practiceCorrect,
-      mastery_pct: finalMasteryPct,
-      last_studied_at: new Date().toISOString(),
-    },
-    { onConflict: "student_id,chapter_id" }
-  );
+  await upsertChapterProgressCompat(supabase, {
+    student_id: session.principalId,
+    chapter_id: chapterId,
+    notes_completed: nextCompleted,
+    notes_progress_pct: nextNotesPct,
+    play_completed: Boolean(existing?.play_completed),
+    subjective_completed: Boolean(existing?.subjective_completed),
+    flashcards_mastered: existing?.flashcards_mastered ?? 0,
+    practice_attempted: practiceAttempted,
+    practice_correct: practiceCorrect,
+    mastery_pct: finalMasteryPct,
+    last_studied_at: new Date().toISOString(),
+  });
 
   // Award one-time +20 mastery points when notes are completed for the very first time
   let reward: Awaited<ReturnType<typeof awardStudentStudyProgress>> | null = null;

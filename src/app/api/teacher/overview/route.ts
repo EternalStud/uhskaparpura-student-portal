@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { jsonNoStore, requireRole } from "@/lib/auth";
+import { expandSubjectIdsWithAliases } from "@/app/api/student/_helpers";
+import type { ClassNum } from "@/types/database";
 
 /**
  * GET /api/teacher/overview
@@ -65,9 +67,24 @@ export async function GET(request: Request) {
   ]);
 
   const openDoubts = allOpenDoubtsRes.data ?? [];
-  const assignedSet = new Set(assignedSubjectIds);
+  const expandedAssignedIds = await expandSubjectIdsWithAliases(assignedSubjectIds);
+  const assignedSet = new Set(expandedAssignedIds);
   const myOpenDoubts = openDoubts.filter((d) => assignedSet.has(d.subject_id));
   const priorityDoubts = (myOpenDoubts.length > 0 ? myOpenDoubts : openDoubts).slice(0, 5);
+
+  // Derive effective assignedClasses from assigned subjects if assigned_classes is empty or partial
+  const effectiveClassSet = new Set<ClassNum>(session.teacher.assignedClasses);
+  for (const subj of assignedSubjectsRes.data ?? []) {
+    if (
+      subj.class_num === 9 ||
+      subj.class_num === 10 ||
+      subj.class_num === 11 ||
+      subj.class_num === 12
+    ) {
+      effectiveClassSet.add(subj.class_num);
+    }
+  }
+  const effectiveAssignedClasses = Array.from(effectiveClassSet).sort((a, b) => a - b);
 
   // Hydrate student names & subject titles for priority doubts and exams
   const studentIds = Array.from(new Set(priorityDoubts.map((d) => d.student_id)));
@@ -103,7 +120,7 @@ export async function GET(request: Request) {
       fullName: session.teacher.fullName,
       teacherTitle: session.teacher.teacherTitle,
       schoolName: session.schoolName,
-      assignedClasses: session.teacher.assignedClasses,
+      assignedClasses: effectiveAssignedClasses,
       assignedSubjects: assignedSubjectsRes.data ?? [],
     },
     stats: {

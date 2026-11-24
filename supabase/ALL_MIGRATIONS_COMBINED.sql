@@ -9,7 +9,7 @@
 --   PART 1: 001_v2_multitenant_schema.sql                  (29 tables, RLS, triggers, RPCs, Realtime)
 --   PART 2: 002_bseb_seed_catalog.sql                      (102 BSEB Class 9-12 subjects + 77 chapters)
 --   PART 3: 003_gold_curriculum_seed.sql                   (6 gold visual chapters, lesson plans, 46 questions)
---   PART 4: 004_interactive_labs_and_universal_skills.sql  (Universal skills, aliases, 4 labs, 4-stage mastery)
+--   PART 4: 004_interactive_labs_and_universal_skills.sql  (Universal skills, ICT/CS/English aliases, 4 labs, 4-stage mastery)
 --   PART 5: 005_seed_ict_curriculum.sql                    (6 ICT & Digital Skills Lab chapters, 6 lesson plans, 130 Qs)
 --   PART 6: 006_seed_english_foundation.sql                (5 English Zero-to-Board Foundation units, 5 lesson plans, 134 Qs)
 --   PART 7: 007_seed_english_textbooks.sql                 (14 BSEB Panorama/Rainbow textbook chapters, 14 lesson plans, 196 Qs)
@@ -3706,7 +3706,16 @@ ON CONFLICT (id) DO UPDATE SET
 -- 4. Link BSEB syllabus aliases cleanly so students & teachers seamlessly share canonical chapters
 UPDATE public.subjects
 SET syllabus_alias_of = 'skill-ict-lab'
-WHERE id IN ('bseb-9-skill-ict', 'bseb-10-skill-ict')
+WHERE id IN (
+  'bseb-9-skill-ict',
+  'bseb-10-skill-ict',
+  'bseb-11-sci-add-cs',
+  'bseb-11-arts-add-cs',
+  'bseb-11-com-add-cs',
+  'bseb-12-sci-add-cs',
+  'bseb-12-arts-add-cs',
+  'bseb-12-com-add-cs'
+)
   AND EXISTS (SELECT 1 FROM public.subjects WHERE id = 'skill-ict-lab');
 
 UPDATE public.subjects
@@ -37899,14 +37908,14 @@ ON CONFLICT (id) DO UPDATE SET
   is_published        = EXCLUDED.is_published;
 
 -- #############################################################################
--- PART 8 / 8: POST-MIGRATION VERIFICATION SUMMARY (READ-ONLY)
+-- PART 8 / 8: POST-MIGRATION VERIFICATION SUMMARY
 -- #############################################################################
 
-SELECT metric, row_count
+SELECT metric, total
 FROM (
-  SELECT 1  AS sort_id, 'subjects_total'                AS metric, COUNT(*)::bigint AS row_count FROM public.subjects
+  SELECT 1 AS sort_id,  'subjects_total'                          AS metric, COUNT(*)::bigint AS total FROM public.subjects
   UNION ALL
-  SELECT 2,             'universal_skill_subjects',                COUNT(*)::bigint FROM public.subjects WHERE class_num = 0
+  SELECT 2,             'universal_skill_labs',                    COUNT(*)::bigint FROM public.subjects WHERE class_num = 0
   UNION ALL
   SELECT 3,             'aliased_subjects',                        COUNT(*)::bigint FROM public.subjects WHERE syllabus_alias_of IS NOT NULL
   UNION ALL

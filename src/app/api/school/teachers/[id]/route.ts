@@ -269,12 +269,39 @@ export async function PATCH(
 
   const postingUpdate: Partial<SchoolTeacherRow> = {};
   if (input.assignedClasses !== undefined) {
-    postingUpdate.assigned_classes = Array.from(new Set(input.assignedClasses)) as ClassNum[];
+    postingUpdate.assigned_classes = Array.from(new Set(input.assignedClasses)).sort(
+      (a, b) => a - b
+    ) as ClassNum[];
   }
   if (input.assignedSubjectIds !== undefined) {
     const uniqueSubjs = Array.from(new Set(input.assignedSubjectIds));
     postingUpdate.assigned_subject_ids = uniqueSubjs;
     postingUpdate.subjects_configured = uniqueSubjs.length > 0;
+
+    // Automatically derive & merge class_num (9–12) from selected subjects so
+    // assigned_classes is never left empty when a teacher has subjects assigned.
+    const mergedClasses = new Set<ClassNum>(postingUpdate.assigned_classes ?? []);
+    if (uniqueSubjs.length > 0) {
+      const { data: subjClasses } = await supabase
+        .from('subjects')
+        .select('class_num')
+        .in('id', uniqueSubjs);
+      for (const row of subjClasses ?? []) {
+        if (
+          row.class_num === 9 ||
+          row.class_num === 10 ||
+          row.class_num === 11 ||
+          row.class_num === 12
+        ) {
+          mergedClasses.add(row.class_num);
+        }
+      }
+    }
+    if (input.assignedClasses !== undefined || uniqueSubjs.length > 0) {
+      postingUpdate.assigned_classes = Array.from(mergedClasses).sort((a, b) => a - b);
+    } else if (uniqueSubjs.length === 0) {
+      postingUpdate.assigned_classes = [];
+    }
   }
   if (input.isSchoolAdmin !== undefined) {
     postingUpdate.is_school_admin = input.isSchoolAdmin;

@@ -4,7 +4,11 @@ import { jsonNoStore, requireRole, validateCsrf } from "@/lib/auth";
 import { sanitizePlainText } from "@/lib/sanitize/content";
 import { getIstDayBoundsUtc } from "@/lib/time/ist";
 import {
-  getStudentEnrolledSubjectIds,
+  expandSubjectIdsWithAliases,
+  getStudentAccessibleSubjectIds,
+  resolveCanonicalSubjectId,
+} from "@/app/api/student/_helpers";
+import {
   loadSafeMediaMap,
   verifyOwnedSchoolMedia,
 } from "@/app/api/collab/_helpers";
@@ -59,39 +63,50 @@ export async function GET(request: Request) {
     .eq("is_hidden", false)
     .limit(120);
 
+  let expandedAssignedSet = new Set<string>();
+
   if (session.role === "student" && session.student) {
-    const enrolledIds = await getStudentEnrolledSubjectIds(
+    const accessibleIds = await getStudentAccessibleSubjectIds(
       session.principalId,
       session.student.academicYear
     );
-    if (enrolledIds.length === 0) {
+    if (accessibleIds.length === 0) {
       return jsonNoStore({ ok: true, doubts: [], remainingToday: STUDENT_DAILY_DOUBT_LIMIT });
     }
-    if (subjectIdFilter && !enrolledIds.includes(subjectIdFilter)) {
+    const expandedFilter = subjectIdFilter
+      ? await expandSubjectIdsWithAliases([subjectIdFilter])
+      : [];
+    if (
+      subjectIdFilter &&
+      !expandedFilter.some((id) => accessibleIds.includes(id))
+    ) {
       return jsonNoStore({ ok: true, doubts: [], remainingToday: STUDENT_DAILY_DOUBT_LIMIT });
     }
     query = query
       .eq("academic_year", session.student.academicYear)
       .eq("class_num", session.student.classNum)
-      .in("subject_id", subjectIdFilter ? [subjectIdFilter] : enrolledIds);
+      .in("subject_id", subjectIdFilter ? expandedFilter : accessibleIds);
   } else {
     // Teacher / School Admin: also compute open counts for My Subjects vs All School Doubts tabs
     const assignedIds = session.teacher?.assignedSubjectIds ?? [];
-    const { data: openSummary } = await supabase
-      .from("open_doubts")
-      .select("subject_id")
-      .eq("school_udise", schoolUdise)
-      .eq("is_hidden", false)
-      .eq("status", "OPEN");
+    const [expandedAssigned, { data: openSummary }] = await Promise.all([
+      expandSubjectIdsWithAliases(assignedIds),
+      supabase
+        .from("open_doubts")
+        .select("subject_id")
+        .eq("school_udise", schoolUdise)
+        .eq("is_hidden", false)
+        .eq("status", "OPEN"),
+    ]);
 
-    const assignedSet = new Set(assignedIds);
+    expandedAssignedSet = new Set(expandedAssigned);
     allUnansweredCount = (openSummary ?? []).length;
     myUnansweredCount = (openSummary ?? []).filter((r) =>
-      assignedSet.has(r.subject_id)
+      expandedAssignedSet.has(r.subject_id)
     ).length;
 
     if (scope === "my") {
-      if (assignedIds.length === 0) {
+      if (expandedAssigned.length === 0) {
         return jsonNoStore({
           ok: true,
           scope,
@@ -99,11 +114,12 @@ export async function GET(request: Request) {
           counts: { myUnansweredCount, allUnansweredCount },
         });
       }
-      query = query.in("subject_id", assignedIds);
+      query = query.in("subject_id", expandedAssigned);
     }
 
     if (subjectIdFilter) {
-      query = query.eq("subject_id", subjectIdFilter);
+      const expandedFilter = await expandSubjectIdsWithAliases([subjectIdFilter]);
+      query = query.in("subject_id", expandedFilter);
     }
     if (classNumParam && ["9", "10", "11", "12"].includes(classNumParam)) {
       query = query.eq("class_num", Number(classNumParam) as ClassNum);
@@ -258,7 +274,10 @@ export async function GET(request: Request) {
     answersByDoubt.set(ans.doubt_id, list);
   }
 
-  const assignedSubjectSet = new Set(session.teacher?.assignedSubjectIds ?? []);
+  const assignedSubjectSet =
+    expandedAssignedSet.size > 0
+      ? expandedAssignedSet
+      : new Set(session.teacher?.assignedSubjectIds ?? []);
 
   return jsonNoStore({
     ok: true,
@@ -368,15 +387,15 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
   const { startIso, endIso } = getIstDayBoundsUtc();
 
-  // Check IST daily rate limit (max 5 doubts/day/student) + enrolled subjects in parallel
-  const [{ count: askedToday, error: limitErr }, enrolledSubjectIds] = await Promise.all([
+  // Check IST daily rate limit (max 5 doubts/day/student) + accessible subjects in parallel
+  const [{ count: askedToday, error: limitErr }, accessibleSubjectIds] = await Promise.all([
     supabase
       .from("open_doubts")
       .select("id", { count: "exact", head: true })
       .eq("student_id", session.principalId)
       .gte("created_at", startIso)
       .lte("created_at", endIso),
-    getStudentEnrolledSubjectIds(session.principalId, session.student.academicYear),
+    getStudentAccessibleSubjectIds(session.principalId, session.student.academicYear),
   ]);
 
   if (limitErr) {
@@ -393,7 +412,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!enrolledSubjectIds.includes(parsed.data.subjectId)) {
+  if (!accessibleSubjectIds.includes(parsed.data.subjectId)) {
     return jsonNoStore(
       {
         error: "You can only post questions in your enrolled subjects.",
@@ -404,12 +423,18 @@ export async function POST(request: Request) {
   }
 
   if (parsed.data.chapterId) {
-    const { data: chap } = await supabase
-      .from("chapters")
-      .select("id, subject_id")
-      .eq("id", parsed.data.chapterId)
-      .maybeSingle();
-    if (!chap || chap.subject_id !== parsed.data.subjectId) {
+    const [{ data: chap }, canonicalSubjectId] = await Promise.all([
+      supabase
+        .from("chapters")
+        .select("id, subject_id")
+        .eq("id", parsed.data.chapterId)
+        .maybeSingle(),
+      resolveCanonicalSubjectId(parsed.data.subjectId),
+    ]);
+    if (
+      !chap ||
+      (chap.subject_id !== parsed.data.subjectId && chap.subject_id !== canonicalSubjectId)
+    ) {
       return jsonNoStore(
         { error: "Selected chapter does not belong to this subject." },
         { status: 400 }

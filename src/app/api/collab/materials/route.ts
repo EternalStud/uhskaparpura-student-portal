@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { fetchSubjectWithAlias } from "@/lib/supabase/schema-compat";
 import { jsonNoStore, requireRole, validateCsrf } from "@/lib/auth";
 import {
   extractYoutubeVideoId,
@@ -7,7 +8,10 @@ import {
   sanitizePlainText,
 } from "@/lib/sanitize/content";
 import {
-  getStudentEnrolledSubjectIds,
+  expandSubjectIdsWithAliases,
+  getStudentAccessibleSubjectIds,
+} from "@/app/api/student/_helpers";
+import {
   loadSafeMediaMap,
   verifyOwnedSchoolMedia,
 } from "@/app/api/collab/_helpers";
@@ -56,19 +60,25 @@ export async function GET(request: Request) {
     .limit(100);
 
   if (session.role === "student" && session.student) {
-    const enrolledIds = await getStudentEnrolledSubjectIds(
+    const accessibleIds = await getStudentAccessibleSubjectIds(
       session.principalId,
       session.student.academicYear
     );
-    if (enrolledIds.length === 0) {
+    if (accessibleIds.length === 0) {
       return jsonNoStore({ ok: true, materials: [] });
     }
-    if (subjectIdFilter && !enrolledIds.includes(subjectIdFilter)) {
+    const expandedFilter = subjectIdFilter
+      ? await expandSubjectIdsWithAliases([subjectIdFilter])
+      : [];
+    if (
+      subjectIdFilter &&
+      !expandedFilter.some((id) => accessibleIds.includes(id))
+    ) {
       return jsonNoStore({ ok: true, materials: [] });
     }
     query = query
       .eq("class_num", session.student.classNum)
-      .in("subject_id", subjectIdFilter ? [subjectIdFilter] : enrolledIds);
+      .in("subject_id", subjectIdFilter ? expandedFilter : accessibleIds);
   } else {
     // Teacher / School Admin view
     if (scope === "my" && session.teacher) {
@@ -76,10 +86,12 @@ export async function GET(request: Request) {
       if (assigned.length === 0) {
         return jsonNoStore({ ok: true, materials: [] });
       }
-      query = query.in("subject_id", assigned);
+      const expandedAssigned = await expandSubjectIdsWithAliases(assigned);
+      query = query.in("subject_id", expandedAssigned);
     }
     if (subjectIdFilter) {
-      query = query.eq("subject_id", subjectIdFilter);
+      const expandedFilter = await expandSubjectIdsWithAliases([subjectIdFilter]);
+      query = query.in("subject_id", expandedFilter);
     }
     if (classNumParam && ["9", "10", "11", "12"].includes(classNumParam)) {
       query = query.eq("class_num", Number(classNumParam) as ClassNum);
@@ -243,11 +255,7 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
 
   const [{ data: subject }, chapterRes] = await Promise.all([
-    supabase
-      .from("subjects")
-      .select("id, class_num, name_hi, name_en, syllabus_alias_of")
-      .eq("id", input.subjectId)
-      .maybeSingle(),
+    fetchSubjectWithAlias(supabase, input.subjectId),
     input.chapterId
       ? supabase
           .from("chapters")

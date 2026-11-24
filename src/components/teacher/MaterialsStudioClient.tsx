@@ -334,10 +334,11 @@ export function MaterialsStudioClient() {
               { value: "", label: t("सभी विषय", "All Subjects") },
               ...subjects.map((s) => ({
                 value: s.id,
-                label: `${t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)} · ${t(
-                  s.name_hi,
-                  s.name_en
-                )}`,
+                label: `${
+                  s.class_num === 0
+                    ? t("कौशल लैब (9–12)", "Skill Lab (9–12)")
+                    : t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)
+                } · ${t(s.name_hi, s.name_en)}`,
               })),
             ]}
           />
@@ -532,10 +533,13 @@ export function MaterialsStudioClient() {
               }}
               options={subjects.map((s) => ({
                 value: s.id,
-                label: `${t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)} · ${t(
-                  s.name_hi,
-                  s.name_en
-                )}${s.isAssigned ? ` (${t("मेरा विषय", "My Subject")})` : ""}`,
+                label: `${
+                  s.class_num === 0
+                    ? t("कौशल लैब (9–12)", "Skill Lab (9–12)")
+                    : t(`कक्षा ${s.class_num}`, `Class ${s.class_num}`)
+                } · ${t(s.name_hi, s.name_en)}${
+                  s.isAssigned ? ` (${t("मेरा विषय", "My Subject")})` : ""
+                }`,
               }))}
             />
 

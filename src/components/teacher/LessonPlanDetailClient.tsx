@@ -13,6 +13,7 @@ import {
   Loader2,
   PenTool,
   Printer,
+  RefreshCw,
   Target,
 } from "lucide-react";
 import { useLanguage } from "@/components/providers/LanguageProvider";
@@ -39,15 +40,20 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
   const [data, setData] = useState<LessonPlanDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
         const res = await fetch(`/api/teacher/lesson-plans/${chapterId}`, {
           cache: "no-store",
         });
-        const json = (await res.json()) as LessonPlanDetailResponse & { error?: string };
+        const json = (await res.json().catch(() => ({}))) as LessonPlanDetailResponse & {
+          error?: string;
+        };
         if (!res.ok || !json.ok) {
           throw new Error(json.error || "Unable to load lesson plan.");
         }
@@ -67,7 +73,7 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
     return () => {
       active = false;
     };
-  }, [chapterId, t]);
+  }, [chapterId, reloadTick, t]);
 
   if (loading) {
     return (
@@ -88,16 +94,39 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
             {t("सभी पाठ योजनाएँ", "All Lesson Plans")}
           </Button>
         </Link>
-        <Card variant="warm">
+        <Card variant="warm" className="space-y-3">
           <p className="text-sm font-medium text-amber-ink">
             {error ?? t("अध्याय नहीं मिला।", "Chapter not found.")}
           </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+            onClick={() => setReloadTick((n) => n + 1)}
+          >
+            {t("पुनः प्रयास करें", "Retry")}
+          </Button>
         </Card>
       </div>
     );
   }
 
   const { chapter, subject, lessonPlan } = data;
+  const teachingSteps = Array.isArray(lessonPlan?.teaching_steps_json)
+    ? lessonPlan.teaching_steps_json
+    : [];
+  const blackboardPoints = Array.isArray(lessonPlan?.blackboard_points_json)
+    ? lessonPlan.blackboard_points_json
+    : [];
+  const misconceptions = Array.isArray(lessonPlan?.common_student_misconceptions_json)
+    ? lessonPlan.common_student_misconceptions_json
+    : [];
+  const classroomActivities = Array.isArray(lessonPlan?.classroom_activities_json)
+    ? lessonPlan.classroom_activities_json
+    : [];
+  const homeworkItems = Array.isArray(lessonPlan?.homework_json)
+    ? lessonPlan.homework_json
+    : [];
 
   return (
     <article className="max-w-4xl mx-auto space-y-6 print-sheet">
@@ -188,13 +217,13 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
             </CardHeader>
             <CardContent>
               <p className="text-sm sm:text-[15px] text-ink leading-[1.85]">
-                {t(lessonPlan.objectives_hi, lessonPlan.objectives_en)}
+                {t(lessonPlan.objectives_hi ?? "", lessonPlan.objectives_en ?? "")}
               </p>
             </CardContent>
           </Card>
 
           {/* Period-by-Period Teaching Flow */}
-          {lessonPlan.teaching_steps_json.length > 0 && (
+          {teachingSteps.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -206,22 +235,22 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {lessonPlan.teaching_steps_json.map((step) => (
+                {teachingSteps.map((step, idx) => (
                   <div
-                    key={step.period_no}
+                    key={step.period_no ?? idx}
                     className="rounded-lg border border-hairline bg-surface-subtle/40 p-4 space-y-2.5 print-avoid-break"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <Badge variant="indigo">
-                          {t(`पीरियड ${step.period_no}`, `Period ${step.period_no}`)}
+                          {t(`पीरियड ${step.period_no ?? idx + 1}`, `Period ${step.period_no ?? idx + 1}`)}
                         </Badge>
                         <h3 className="text-sm font-bold text-ink">
-                          {t(step.phase_hi, step.phase_en)}
+                          {t(step.phase_hi ?? "", step.phase_en ?? "")}
                         </h3>
                       </div>
                       <span className="text-xs font-semibold text-ink-muted">
-                        {step.duration_mins} {t("मिनट", "mins")}
+                        {step.duration_mins ?? 40} {t("मिनट", "mins")}
                       </span>
                     </div>
 
@@ -229,14 +258,14 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                       <span className="font-semibold text-ink-secondary">
                         {t("शिक्षक गतिविधि: ", "Teaching Flow: ")}
                       </span>
-                      {t(step.teacher_action_hi, step.teacher_action_en)}
+                      {t(step.teacher_action_hi ?? "", step.teacher_action_en ?? "")}
                     </div>
 
                     <div className="rounded-md border border-emerald-mastery/25 bg-emerald-soft px-3 py-2 text-xs sm:text-sm text-emerald-ink">
                       <span className="font-bold">
                         {t("कक्षा जाँच प्रश्न: ", "Quick Student Check: ")}
                       </span>
-                      {t(step.student_check_hi, step.student_check_en)}
+                      {t(step.student_check_hi ?? "", step.student_check_en ?? "")}
                     </div>
                   </div>
                 ))}
@@ -245,7 +274,7 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
           )}
 
           {/* Blackboard Key Points */}
-          {lessonPlan.blackboard_points_json.length > 0 && (
+          {blackboardPoints.length > 0 && (
             <Card className="print-avoid-break">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -254,29 +283,35 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {lessonPlan.blackboard_points_json.map((box, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-paper border border-slate-700/40 bg-slate-900 text-slate-50 p-4 sm:p-5 space-y-2.5"
-                  >
-                    <h3 className="text-sm font-bold text-amber-300">
-                      {t(box.heading_hi, box.heading_en)}
-                    </h3>
-                    <ul className="space-y-1.5 text-sm leading-relaxed list-disc pl-5">
-                      {box.points_hi.map((ptHi, ptIdx) => (
-                        <li key={ptIdx}>
-                          {t(ptHi, box.points_en[ptIdx] ?? ptHi)}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+                {blackboardPoints.map((box, idx) => {
+                  const ptsHi = Array.isArray(box?.points_hi) ? box.points_hi : [];
+                  const ptsEn = Array.isArray(box?.points_en) ? box.points_en : [];
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-paper border border-slate-700/40 bg-slate-900 text-slate-50 p-4 sm:p-5 space-y-2.5"
+                    >
+                      <h3 className="text-sm font-bold text-amber-300">
+                        {t(box?.heading_hi ?? "", box?.heading_en ?? "")}
+                      </h3>
+                      {ptsHi.length > 0 && (
+                        <ul className="space-y-1.5 text-sm leading-relaxed list-disc pl-5">
+                          {ptsHi.map((ptHi, ptIdx) => (
+                            <li key={ptIdx}>
+                              {t(ptHi, ptsEn[ptIdx] ?? ptHi)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}
 
           {/* Common Student Misconceptions */}
-          {lessonPlan.common_student_misconceptions_json.length > 0 && (
+          {misconceptions.length > 0 && (
             <Card variant="warm" className="print-avoid-break">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -288,20 +323,20 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {lessonPlan.common_student_misconceptions_json.map((item, idx) => (
+                {misconceptions.map((item, idx) => (
                   <div
                     key={idx}
                     className="rounded-lg border border-amber-warm/25 bg-surface p-3.5 space-y-2"
                   >
                     <p className="text-sm font-semibold text-crimson-ink">
                       {t("सामान्य त्रुटि: ", "Misconception: ")}
-                      {t(item.misconception_hi, item.misconception_en)}
+                      {t(item?.misconception_hi ?? "", item?.misconception_en ?? "")}
                     </p>
                     <p className="text-sm text-emerald-ink flex items-start gap-1.5">
                       <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
                         <strong>{t("सही समझ: ", "Correction: ")}</strong>
-                        {t(item.correction_hi, item.correction_en)}
+                        {t(item?.correction_hi ?? "", item?.correction_en ?? "")}
                       </span>
                     </p>
                   </div>
@@ -311,7 +346,7 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
           )}
 
           {/* Hands-on Classroom Activities */}
-          {lessonPlan.classroom_activities_json.length > 0 && (
+          {classroomActivities.length > 0 && (
             <Card className="print-avoid-break">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -320,20 +355,20 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {lessonPlan.classroom_activities_json.map((act, idx) => (
+                {classroomActivities.map((act, idx) => (
                   <div
                     key={idx}
                     className="rounded-lg border border-hairline bg-surface-subtle/50 p-4 space-y-2"
                   >
                     <h3 className="text-sm font-bold text-ink">
-                      {t(act.title_hi, act.title_en)}
+                      {t(act?.title_hi ?? "", act?.title_en ?? "")}
                     </h3>
                     <p className="text-xs text-ink-secondary">
                       <strong>{t("आवश्यक सामग्री: ", "Materials: ")}</strong>
-                      {t(act.materials_hi, act.materials_en)}
+                      {t(act?.materials_hi ?? "", act?.materials_en ?? "")}
                     </p>
                     <p className="text-sm text-ink leading-relaxed">
-                      {t(act.steps_hi, act.steps_en)}
+                      {t(act?.steps_hi ?? "", act?.steps_en ?? "")}
                     </p>
                   </div>
                 ))}
@@ -342,7 +377,7 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
           )}
 
           {/* Differentiated Homework */}
-          {lessonPlan.homework_json.length > 0 && (
+          {homeworkItems.length > 0 && (
             <Card className="print-avoid-break">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -351,28 +386,28 @@ export function LessonPlanDetailClient({ chapterId }: { chapterId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2.5">
-                {lessonPlan.homework_json.map((hw, idx) => (
+                {homeworkItems.map((hw, idx) => (
                   <div
                     key={idx}
                     className="flex flex-col sm:flex-row sm:items-start gap-2.5 rounded-lg border border-hairline p-3.5"
                   >
                     <Badge
                       variant={
-                        hw.level === "FOUNDATION"
+                        hw?.level === "FOUNDATION"
                           ? "emerald"
-                          : hw.level === "BOARD"
+                          : hw?.level === "BOARD"
                           ? "indigo"
                           : "amber"
                       }
                     >
-                      {hw.level === "FOUNDATION"
+                      {hw?.level === "FOUNDATION"
                         ? t("बुनियादी", "Foundation")
-                        : hw.level === "BOARD"
+                        : hw?.level === "BOARD"
                         ? t("बोर्ड स्तर", "Board Level")
                         : t("चुनौती", "Challenge")}
                     </Badge>
                     <p className="text-sm text-ink leading-relaxed">
-                      {t(hw.task_hi, hw.task_en)}
+                      {t(hw?.task_hi ?? "", hw?.task_en ?? "")}
                     </p>
                   </div>
                 ))}

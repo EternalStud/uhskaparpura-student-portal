@@ -2,6 +2,7 @@ import React from "react";
 import { redirect, notFound } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { normalizeSubjectRow } from "@/lib/supabase/schema-compat";
 import {
   computeChapterMedal,
   computeFourStageProgress,
@@ -39,7 +40,13 @@ export default async function StudentSubjectJourneyPage({
       .eq("student_id", session.principalId),
   ]);
 
-  const subject = subjectRes.data as SubjectRow | null;
+  const subject = subjectRes.data
+    ? normalizeSubjectRow(
+        subjectRes.data as Omit<SubjectRow, "syllabus_alias_of"> & {
+          syllabus_alias_of?: string | null;
+        }
+      )
+    : null;
   if (!subject) {
     notFound();
   }

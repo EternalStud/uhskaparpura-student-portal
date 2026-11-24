@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireRole, jsonNoStore } from "@/lib/auth/session";
 import { validateCsrf } from "@/lib/auth/csrf";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { upsertChapterProgressCompat } from "@/lib/supabase/schema-compat";
 import { getTodayIst } from "@/lib/time/ist";
 import {
   awardStudentStudyProgress,
@@ -568,22 +569,19 @@ export async function POST(request: Request) {
   const finalMasteryPct = Math.max(prevProg?.mastery_pct ?? 0, fourStage.totalPct);
 
   writes.push(
-    supabase.from("student_chapter_progress").upsert(
-      {
-        student_id: session.principalId,
-        chapter_id: chapter.id,
-        notes_completed: prevProg?.notes_completed ?? false,
-        notes_progress_pct: notesPct,
-        play_completed: nextPlayCompleted,
-        subjective_completed: nextSubjectiveCompleted,
-        flashcards_mastered: nextFlashcards,
-        practice_attempted: nextAttempted,
-        practice_correct: nextCorrect,
-        mastery_pct: finalMasteryPct,
-        last_studied_at: nowIso,
-      },
-      { onConflict: "student_id,chapter_id" }
-    )
+    upsertChapterProgressCompat(supabase, {
+      student_id: session.principalId,
+      chapter_id: chapter.id,
+      notes_completed: prevProg?.notes_completed ?? false,
+      notes_progress_pct: notesPct,
+      play_completed: nextPlayCompleted,
+      subjective_completed: nextSubjectiveCompleted,
+      flashcards_mastered: nextFlashcards,
+      practice_attempted: nextAttempted,
+      practice_correct: nextCorrect,
+      mastery_pct: finalMasteryPct,
+      last_studied_at: nowIso,
+    })
   );
 
   await Promise.all(writes);

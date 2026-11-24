@@ -86,10 +86,22 @@ export async function GET(request: Request) {
     }
   }
 
+  const subjectClassById = new Map(
+    (subjects ?? []).map((s) => [s.id, s.class_num])
+  );
+
   const teachers = (postings ?? [])
     .map((p) => {
       const t = teacherMap.get(p.teacher_id);
       if (!t) return null;
+      const subjIds = p.assigned_subject_ids ?? [];
+      const classSet = new Set<ClassNum>(p.assigned_classes ?? []);
+      for (const sid of subjIds) {
+        const cn = subjectClassById.get(sid);
+        if (cn === 9 || cn === 10 || cn === 11 || cn === 12) {
+          classSet.add(cn);
+        }
+      }
       return {
         teacherId: t.id,
         teacherCode: t.teacher_code,
@@ -100,8 +112,8 @@ export async function GET(request: Request) {
         isSchoolAdmin: p.is_school_admin,
         isActive: p.is_active,
         subjectsConfigured: p.subjects_configured,
-        assignedClasses: p.assigned_classes ?? [],
-        assignedSubjectIds: p.assigned_subject_ids ?? [],
+        assignedClasses: Array.from(classSet).sort((a, b) => a - b),
+        assignedSubjectIds: subjIds,
         joinedAt: p.joined_at,
         deactivatedAt: p.deactivated_at,
       };
@@ -210,8 +222,25 @@ export async function POST(request: Request) {
     teacherId = created.id;
   }
 
-  const assignedClasses: ClassNum[] = Array.from(new Set(input.assignedClasses ?? []));
   const assignedSubjectIds = Array.from(new Set(input.assignedSubjectIds ?? []));
+  const mergedClassSet = new Set<ClassNum>(input.assignedClasses ?? []);
+  if (assignedSubjectIds.length > 0) {
+    const { data: subjRows } = await supabase
+      .from('subjects')
+      .select('class_num')
+      .in('id', assignedSubjectIds);
+    for (const row of subjRows ?? []) {
+      if (
+        row.class_num === 9 ||
+        row.class_num === 10 ||
+        row.class_num === 11 ||
+        row.class_num === 12
+      ) {
+        mergedClassSet.add(row.class_num);
+      }
+    }
+  }
+  const assignedClasses: ClassNum[] = Array.from(mergedClassSet).sort((a, b) => a - b);
 
   const { error: postingErr } = await supabase.from('school_teachers').upsert(
     {

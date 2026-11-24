@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { fetchSubjectWithAlias } from "@/lib/supabase/schema-compat";
 import {
   generateExamRoomPin,
   jsonNoStore,
@@ -393,11 +394,7 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdmin();
 
-  const { data: subject } = await supabase
-    .from("subjects")
-    .select("id, class_num, stream, syllabus_alias_of")
-    .eq("id", input.subjectId)
-    .maybeSingle();
+  const { data: subject } = await fetchSubjectWithAlias(supabase, input.subjectId);
 
   if (!subject) {
     return jsonNoStore({ error: "Selected subject was not found." }, { status: 400 });

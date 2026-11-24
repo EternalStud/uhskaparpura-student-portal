@@ -88,7 +88,16 @@ ON CONFLICT (id) DO UPDATE SET
 -- 4. Link BSEB syllabus aliases cleanly so students & teachers seamlessly share canonical chapters
 UPDATE public.subjects
 SET syllabus_alias_of = 'skill-ict-lab'
-WHERE id IN ('bseb-9-skill-ict', 'bseb-10-skill-ict')
+WHERE id IN (
+  'bseb-9-skill-ict',
+  'bseb-10-skill-ict',
+  'bseb-11-sci-add-cs',
+  'bseb-11-arts-add-cs',
+  'bseb-11-com-add-cs',
+  'bseb-12-sci-add-cs',
+  'bseb-12-arts-add-cs',
+  'bseb-12-com-add-cs'
+)
   AND EXISTS (SELECT 1 FROM public.subjects WHERE id = 'skill-ict-lab');
 
 UPDATE public.subjects
